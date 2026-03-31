@@ -1,0 +1,73 @@
+services:
+
+  # ─── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-payfit}
+      POSTGRES_USER:     ${POSTGRES_USER:-payfit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-payfit}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-payfit} -d ${POSTGRES_DB:-payfit}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── pgAdmin ──────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL:    ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"          # single-user mode, pas de login
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro  # connexion auto à la DB
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ─── Backend FastAPI ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-payfit}:${POSTGRES_PASSWORD:-payfit}@db:5432/${POSTGRES_DB:-payfit}
+      DEBUG: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app        # hot reload : les modifications sont prises en compte sans rebuild
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ─── Frontend React / Vite ────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8000   # le navigateur appelle le backend directement
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app                    # hot reload
+      - /app/node_modules                  # préserve node_modules du container
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  pgadmin_data:

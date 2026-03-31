@@ -1,0 +1,63 @@
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr
+
+from app.models.invitation import InvitationStatus
+from app.models.user import UserRole
+
+
+class InvitationAccountantCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class InvitationClientCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    company_name: str
+    client_id: Optional[str] = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class InvitationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    first_name: str
+    last_name: str
+    role: UserRole
+    client_id: Optional[str] = None
+    client_name: Optional[str] = None
+    client_company_name: Optional[str] = None
+    status: InvitationStatus
+    expires_at: datetime
+    invited_by_user_id: str
+    company_id: str
+    accepted_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class InvitationPublicRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    email: str
+    first_name: str
+    last_name: str
+    role: UserRole
+    client_id: Optional[str] = None
+    client_name: Optional[str] = None
+    client_company_name: Optional[str] = None
+    status: InvitationStatus
+    expires_at: datetime
+
+
+class InvitationAcceptRequest(BaseModel):
+    token: str
+    password: str
