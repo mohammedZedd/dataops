@@ -24,7 +24,7 @@ dist-ssr
 *.sw?
 .vite
 .claude.env
-backend/.env
+**/.env
 
 # Python
 __pycache__/
