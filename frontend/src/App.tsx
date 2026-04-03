@@ -11,6 +11,7 @@ import RegisterPage from './pages/RegisterPage';
 import AccountingEntryPage from './pages/AccountingEntryPage';
 import InvitationsPage from './pages/InvitationsPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import ClientDocumentsPage from './pages/ClientDocumentsPage';
 
 export default function App() {
   return (
@@ -20,7 +21,7 @@ export default function App() {
           {/* Routes publiques */}
           <Route path="/login"    element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/accept-invite" element={<AcceptInvitePage />} />
+          <Route path="/accept-invitation" element={<AcceptInvitePage />} />
 
           {/* Routes protégées — nécessitent un JWT valide */}
           <Route element={<ProtectedRoute />}>
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="clients/:clientId/invoices/:invoiceId" element={<DocumentDetailPage />} />
               <Route path="accounting-entry" element={<AccountingEntryPage />} />
               <Route path="invitations" element={<InvitationsPage />} />
+              <Route path="client/documents" element={<ClientDocumentsPage />} />
             </Route>
           </Route>
 

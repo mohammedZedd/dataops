@@ -32,6 +32,7 @@ class User(Base):
     )
     company_id: Mapped[str] = mapped_column(String, ForeignKey("companies.id"), nullable=False)
     client_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("clients.id"), nullable=True)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     company: Mapped["Company"] = relationship("Company", foreign_keys=[company_id], lazy="joined")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

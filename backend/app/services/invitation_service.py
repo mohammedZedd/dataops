@@ -103,3 +103,17 @@ def accept_invitation(db: Session, invitation: Invitation) -> Invitation:
     db.commit()
     db.refresh(invitation)
     return invitation
+
+
+def cancel_invitation(db: Session, invitation: Invitation) -> None:
+    db.delete(invitation)
+    db.commit()
+
+
+def renew_invitation(db: Session, invitation: Invitation) -> Invitation:
+    invitation.token = _generate_token(db)
+    invitation.status = InvitationStatus.PENDING
+    invitation.expires_at = _expires_at()
+    db.commit()
+    db.refresh(invitation)
+    return invitation

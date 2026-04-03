@@ -43,6 +43,7 @@ def create_user_from_invitation(
     role: UserRole,
     company_id: str,
     client_id: str | None = None,
+    phone_number: str | None = None,
 ) -> User:
     user = User(
         first_name=first_name,
@@ -52,6 +53,7 @@ def create_user_from_invitation(
         role=role,
         company_id=company_id,
         client_id=client_id,
+        phone_number=phone_number,
         is_active=True,
         email_verified=True,
     )

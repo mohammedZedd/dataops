@@ -12,11 +12,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60 * 24  # 24h
 
-    # ─── AWS SES ──────────────────────────────────────────────────────────────
+    # ─── AWS ──────────────────────────────────────────────────────────────────
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "eu-west-3"
     SES_SENDER_EMAIL: str = "noreply@dataops.ma"
+    S3_BUCKET_NAME: str = "dataops"
 
     class Config:
         env_file = ".env"

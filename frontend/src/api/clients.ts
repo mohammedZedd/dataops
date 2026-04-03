@@ -1,7 +1,17 @@
 import apiClient from './axios';
-import type { Client } from '../types';
+import type { Client, ClientUser } from '../types';
 
 // ─── Lecture ──────────────────────────────────────────────────────────────────
+
+export async function getClientUsers(): Promise<ClientUser[]> {
+  try {
+    const { data } = await apiClient.get<ClientUser[]>('/clients/users');
+    return data;
+  } catch (error) {
+    console.error('[clients] getClientUsers :', error);
+    throw new Error('Impossible de charger la liste des clients.');
+  }
+}
 
 export async function getClients(): Promise<Client[]> {
   try {

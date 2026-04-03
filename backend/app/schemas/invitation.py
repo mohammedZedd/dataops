@@ -51,6 +51,7 @@ class InvitationPublicRead(BaseModel):
     first_name: str
     last_name: str
     role: UserRole
+    company_name: Optional[str] = None
     client_id: Optional[str] = None
     client_name: Optional[str] = None
     client_company_name: Optional[str] = None
@@ -60,4 +61,9 @@ class InvitationPublicRead(BaseModel):
 
 class InvitationAcceptRequest(BaseModel):
     token: str
+    first_name: str
+    last_name: str
+    phone_number: str
     password: str
+
+    model_config = ConfigDict(str_strip_whitespace=True)

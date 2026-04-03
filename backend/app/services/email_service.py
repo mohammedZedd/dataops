@@ -57,6 +57,7 @@ def _send(
     html_body: str,
 ) -> bool:
     """Envoie un email via SES. Retourne True si succès, False sinon."""
+    logger.info("[EMAIL] Sending to %s subject=%r", to_email, subject)
     try:
         _ses_client().send_email(
             Source=settings.SES_SENDER_EMAIL,
