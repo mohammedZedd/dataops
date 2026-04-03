@@ -36,6 +36,7 @@ class UserRead(BaseModel):
     company_id: str
     company_name: Optional[str] = None
     client_id: Optional[str] = None
+    phone_number: Optional[str] = None
     created_at: datetime
 
     @model_validator(mode='before')
@@ -53,6 +54,7 @@ class UserRead(BaseModel):
                 'company_id': data.company_id,
                 'company_name': data.company.name,
                 'client_id': data.client_id,
+                'phone_number': getattr(data, 'phone_number', None),
                 'created_at': data.created_at,
             }
         return data

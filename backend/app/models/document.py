@@ -14,11 +14,15 @@ class Document(Base):
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    client_id: Mapped[str] = mapped_column(
-        String, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    client_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("clients.id", ondelete="CASCADE"), nullable=True
+    )
+    uploaded_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
-    file_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    s3_key: Mapped[str] = mapped_column(String(1000), nullable=False)
+    file_size: Mapped[Optional[int]] = mapped_column(nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -28,7 +32,7 @@ class Document(Base):
         nullable=False,
     )
 
-    client: Mapped["Client"] = relationship("Client", back_populates="documents")  # noqa: F821
+    client: Mapped[Optional["Client"]] = relationship("Client", back_populates="documents")  # noqa: F821
     invoice: Mapped[Optional["Invoice"]] = relationship(  # noqa: F821
         "Invoice", back_populates="document", uselist=False, cascade="all, delete-orphan"
     )

@@ -11,6 +11,7 @@ export interface User {
   company_id: string;
   company_name?: string | null;
   client_id?: string | null;
+  phone_number?: string | null;
   created_at: string;
 }
 
@@ -54,6 +55,7 @@ export interface InvitationPublic {
   first_name: string;
   last_name: string;
   role: UserRole;
+  company_name?: string | null;
   client_id?: string | null;
   client_name?: string | null;
   client_company_name?: string | null;
@@ -77,6 +79,9 @@ export interface InvitationClientCreatePayload {
 
 export interface InvitationAcceptPayload {
   token: string;
+  first_name: string;
+  last_name: string;
+  phone_number: string;
   password: string;
 }
 
@@ -88,12 +93,35 @@ export type DocumentStatus =
   | 'processed'   // extraction terminée
   | 'error';      // échec d'extraction
 
+export interface ClientDocument {
+  id: string;
+  file_name: string;
+  file_url: string;
+  file_size: number | null;
+  uploaded_at: string;
+  status: DocumentStatus;
+}
+
 export type InvoiceStatus =
   | 'to_review'   // données extraites, attente vérification humaine
   | 'validated'   // validée par le comptable
   | 'rejected';   // rejetée (erreur de saisie / doublon)
 
 // ─── Entités métier ───────────────────────────────────────────────────────────
+
+/**
+ * User avec role CLIENT vu par le cabinet (issu du système d'invitation).
+ */
+export interface ClientUser {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_number?: string | null;
+  client_company_name?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
 
 /**
  * Client du cabinet comptable.

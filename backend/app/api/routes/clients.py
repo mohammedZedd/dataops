@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 from app.dependencies.auth import get_current_user
 from app.models.user import User, UserRole
 from app.db.dependencies import get_db
-from app.schemas.client import ClientCreate, ClientRead
+from app.schemas.client import ClientCreate, ClientRead, ClientUserRead
 from app.schemas.invoice import InvoiceRead
 from app.services import client_service, invoice_service
+from sqlalchemy import select
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
@@ -34,6 +35,40 @@ def create_client(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
     client = client_service.create_client(db, payload, company_id=current_user.company_id)
     return client_service._to_read(db, client)
+
+
+@router.get("/users", response_model=list[ClientUserRead])
+def list_client_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Retourne tous les users avec role=CLIENT appartenant au cabinet."""
+    if current_user.role == UserRole.CLIENT:
+        raise HTTPException(status_code=403, detail="Accès refusé.")
+    users = db.scalars(
+        select(User)
+        .where(User.company_id == current_user.company_id)
+        .where(User.role == UserRole.CLIENT)
+        .order_by(User.created_at.desc())
+    ).all()
+    result = []
+    for u in users:
+        company_name = None
+        if u.client_id:
+            client = client_service.get_client(db, u.client_id)
+            if client:
+                company_name = client.name
+        result.append(ClientUserRead(
+            id=u.id,
+            first_name=u.first_name,
+            last_name=u.last_name,
+            email=u.email,
+            phone_number=u.phone_number,
+            client_company_name=company_name,
+            is_active=u.is_active,
+            created_at=u.created_at,
+        ))
+    return result
 
 
 @router.get("/{client_id}", response_model=ClientRead)

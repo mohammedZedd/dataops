@@ -36,3 +36,7 @@ export async function acceptInvitation(payload: InvitationAcceptPayload): Promis
   const { data } = await apiClient.post<TokenResponse>('/invitations/accept', payload);
   return data;
 }
+
+export async function resendInvitation(id: string): Promise<void> {
+  await apiClient.post(`/invitations/resend/${id}`);
+}

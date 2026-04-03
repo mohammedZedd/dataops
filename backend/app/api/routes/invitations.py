@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db.dependencies import get_db
 from app.dependencies.auth import require_admin
-from app.models.invitation import InvitationStatus
+from app.models.company import Company
+from app.models.invitation import Invitation as InvitationModel, InvitationStatus
 from app.models.user import User, UserRole
 from app.models.client import Client
 from app.schemas.invitation import (
@@ -52,11 +53,13 @@ def _invitation_to_public(db: Session, invitation):
         client = db.get(Client, invitation.client_id)
         if client:
             client_name = client.name
+    company = db.get(Company, invitation.company_id)
     data = {
         "email": invitation.email,
         "first_name": invitation.first_name,
         "last_name": invitation.last_name,
         "role": invitation.role,
+        "company_name": company.name if company else None,
         "client_id": invitation.client_id,
         "client_name": client_name,
         "client_company_name": invitation.client_company_name,
@@ -82,7 +85,7 @@ def invite_accountant(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    invite_link = f"https://dataops.ma/accept-invitation?token={invitation.token}"
+    invite_link = f"{settings.FRONTEND_URL}/accept-invitation?token={invitation.token}"
     email_service.send_invitation_accountant_email(
         to_email=invitation.email,
         first_name=invitation.first_name,
@@ -116,7 +119,7 @@ def invite_client(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    invite_link = f"https://dataops.ma/accept-invitation?token={invitation.token}"
+    invite_link = f"{settings.FRONTEND_URL}/accept-invitation?token={invitation.token}"
     email_service.send_invitation_client_email(
         to_email=invitation.email,
         first_name=invitation.first_name,
@@ -152,6 +155,50 @@ def get_invitation(token: str, db: Session = Depends(get_db)):
     return _invitation_to_public(db, invitation)
 
 
+@router.delete("/{invitation_id}", status_code=204)
+def revoke_invitation(
+    invitation_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    invitation = db.get(InvitationModel, invitation_id)
+    if not invitation or invitation.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Invitation introuvable.")
+    if invitation.status != InvitationStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Seules les invitations en attente peuvent être révoquées.")
+    invitation_service.cancel_invitation(db, invitation)
+
+
+@router.post("/resend/{invitation_id}", status_code=204)
+def resend_invitation(
+    invitation_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    invitation = db.get(InvitationModel, invitation_id)
+    if not invitation or invitation.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Invitation introuvable.")
+
+    invitation = invitation_service.renew_invitation(db, invitation)
+
+    invite_link = f"{settings.FRONTEND_URL}/accept-invitation?token={invitation.token}"
+    if invitation.role == UserRole.ACCOUNTANT:
+        email_service.send_invitation_accountant_email(
+            to_email=invitation.email,
+            first_name=invitation.first_name,
+            cabinet_name=current_user.company.name,
+            invite_link=invite_link,
+        )
+    else:
+        email_service.send_invitation_client_email(
+            to_email=invitation.email,
+            first_name=invitation.first_name,
+            cabinet_name=current_user.company.name,
+            client_company_name=invitation.client_company_name or "",
+            invite_link=invite_link,
+        )
+
+
 @router.post("/accept", response_model=TokenResponse)
 def accept_invitation(payload: InvitationAcceptRequest, db: Session = Depends(get_db)):
     if len(payload.password) < 8:
@@ -161,8 +208,11 @@ def accept_invitation(payload: InvitationAcceptRequest, db: Session = Depends(ge
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation invalide.")
 
+    if invitation.status == InvitationStatus.ACCEPTED:
+        raise HTTPException(status_code=409, detail="Invitation déjà utilisée.")
+
     if invitation.status != InvitationStatus.PENDING:
-        raise HTTPException(status_code=400, detail="Invitation déjà utilisée.")
+        raise HTTPException(status_code=400, detail="Invitation annulée ou invalide.")
 
     if invitation.expires_at <= invitation_service._now():
         invitation_service.mark_expired(db, invitation)
@@ -171,18 +221,16 @@ def accept_invitation(payload: InvitationAcceptRequest, db: Session = Depends(ge
     if user_service.get_by_email(db, invitation.email):
         raise HTTPException(status_code=409, detail="Un utilisateur existe déjà avec cet email.")
 
-    if invitation.role == UserRole.CLIENT and not invitation.client_id:
-        raise HTTPException(status_code=400, detail="Invitation client invalide.")
-
     user = user_service.create_user_from_invitation(
         db,
-        first_name=invitation.first_name,
-        last_name=invitation.last_name,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
         email=invitation.email,
         password=payload.password,
         role=invitation.role,
         company_id=invitation.company_id,
         client_id=invitation.client_id,
+        phone_number=payload.phone_number,
     )
     invitation_service.accept_invitation(db, invitation)
 

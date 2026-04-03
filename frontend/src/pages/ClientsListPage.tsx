@@ -1,25 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, AlertCircle } from 'lucide-react';
-import { getClients, createClient } from '../api';
-import { ClientsTable } from '../features/clients/ClientsTable';
-import { AddClientModal } from '../features/clients/AddClientModal';
+import { Users } from 'lucide-react';
+import { getClientUsers } from '../api/clients';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
-import type { Client } from '../types';
+import type { ClientUser } from '../types';
 
 export default function ClientsListPage() {
-  const navigate = useNavigate();
-
-  const [clients,   setClients]   = useState<Client[]>([]);
+  const [clients,   setClients]   = useState<ClientUser[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
 
-  // useCallback pour pouvoir passer fetchClients au bouton "Réessayer"
   const fetchClients = useCallback(() => {
     setLoading(true);
     setError(null);
-    getClients()
+    getClientUsers()
       .then(setClients)
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
@@ -27,87 +20,86 @@ export default function ClientsListPage() {
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
 
-  async function handleCreate(name: string) {
-    const created = await createClient(name); // erreurs remontées au modal
-    setClients(prev => [...prev, created]);
-  }
-
-  const totalToReview = clients.reduce((s, c) => s + c.invoicesToReview, 0);
-
   return (
-    <>
+    <div className="space-y-6">
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-            Gestion
+      <div className="pb-5 border-b border-gray-200">
+        <h1 className="text-xl font-semibold text-gray-900">Clients</h1>
+        {!loading && !error && (
+          <p className="text-sm text-gray-500 mt-0.5">
+            {clients.length} client{clients.length > 1 ? 's' : ''} inscrit{clients.length > 1 ? 's' : ''}
           </p>
-          <h1 className="text-[20px] font-bold text-gray-900">Clients</h1>
-          {!loading && !error && (
-            <p className="text-[13px] text-gray-500 mt-0.5">
-              {clients.length} client{clients.length > 1 ? 's' : ''} actif{clients.length > 1 ? 's' : ''}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700
-            text-white text-[13px] font-medium rounded-lg transition-colors shadow-sm"
-        >
-          <Plus size={15} />
-          Ajouter un client
-        </button>
+        )}
       </div>
 
-      {/* Erreur */}
       {error && <ErrorBanner message={error} onRetry={fetchClients} />}
 
-      {/* Alerte factures en attente */}
-      {!error && totalToReview > 0 && (
-        <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5">
-          <AlertCircle size={15} className="text-amber-500 flex-shrink-0" />
-          <p className="text-[13px] text-amber-700">
-            <span className="font-semibold">
-              {totalToReview} facture{totalToReview > 1 ? 's' : ''}
-            </span>
-            {' '}nécessite{totalToReview > 1 ? 'nt' : ''} une vérification.
-          </p>
-        </div>
-      )}
-
-      {/* Table card */}
-      <div
-        className="bg-white rounded-xl border border-gray-100 overflow-hidden"
-        style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06)' }}
-      >
+      {/* Table */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <div className="h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : error ? (
-          // Erreur déjà affichée via ErrorBanner, on affiche juste une table vide stylée
-          <div className="py-12 text-center">
-            <p className="text-[13px] text-gray-400">Les données n'ont pas pu être chargées.</p>
-          </div>
         ) : clients.length === 0 ? (
           <div className="py-16 text-center">
-            <p className="text-[14px] font-semibold text-gray-600">Aucun client</p>
-            <p className="text-[13px] text-gray-400 mt-1">Commencez par ajouter votre premier client.</p>
+            <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+              <Users size={18} className="text-gray-400" />
+            </div>
+            <p className="text-sm font-semibold text-gray-600">Aucun client inscrit</p>
+            <p className="text-sm text-gray-400 mt-1">
+              Les clients apparaissent ici après avoir accepté leur invitation.
+            </p>
           </div>
         ) : (
-          <ClientsTable
-            clients={clients}
-            onRowClick={c => navigate(`/clients/${c.id}`)}
-          />
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Nom</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Email</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Téléphone</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Entreprise</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Inscription</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clients.map((c, idx) => (
+                <tr
+                  key={c.id}
+                  className={`hover:bg-gray-50 transition-colors ${idx < clients.length - 1 ? 'border-b border-gray-100' : ''}`}
+                >
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                    {c.first_name} {c.last_name}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{c.email}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                    {c.phone_number ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {c.client_company_name ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                    {new Date(c.created_at).toLocaleDateString('fr-FR')}
+                  </td>
+                  <td className="px-4 py-3">
+                    {c.is_active ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-green-50 text-green-700 border border-green-200">
+                        Actif
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-100 text-gray-500 border border-gray-200">
+                        Inactif
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
-      {showModal && (
-        <AddClientModal
-          onClose={() => setShowModal(false)}
-          onSubmit={handleCreate}
-        />
-      )}
-    </>
+    </div>
   );
 }
