@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Mail, Users, UserPlus, Filter, CheckCircle } from 'lucide-react';
-import { getInvitations, resendInvitation } from '../api/invitations';
+import { getInvitations, resendInvitation, revokeInvitation } from '../api/invitations';
 import { getClients } from '../api/clients';
 import { useAuth } from '../context/AuthContext';
 import type { Client, Invitation } from '../types';
@@ -88,6 +89,7 @@ export default function InvitationsPage() {
 
   const [showAccountantModal, setShowAccountantModal] = useState(false);
   const [showClientModal,     setShowClientModal]     = useState(false);
+  const [confirmDeleteId,     setConfirmDeleteId]     = useState<string | null>(null);
 
   // Inline filters
   const [activeCol,  setActiveCol]  = useState<FilterCol>(null);
@@ -121,6 +123,21 @@ export default function InvitationsPage() {
 
   function handleCreated(invitation: Invitation) {
     setInvitations((prev) => [invitation, ...prev]);
+  }
+
+  async function handleDelete(id: string) {
+    setActioningId(id);
+    setConfirmDeleteId(null);
+    try {
+      await revokeInvitation(id);
+      setInvitations((prev) => prev.filter((inv) => inv.id !== id));
+      setSuccessMsg('Invitation supprimée.');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch {
+      setListError('Impossible de supprimer l\'invitation.');
+    } finally {
+      setActioningId(null);
+    }
   }
 
   async function handleResend(id: string) {
@@ -214,19 +231,10 @@ export default function InvitationsPage() {
         ${successMsg ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'}`}
     >
       <CheckCircle size={20} className="text-green-500 flex-shrink-0" />
-      <span className="text-sm font-medium text-gray-800">Invitation renvoyée</span>
+      <span className="text-sm font-medium text-gray-800">{successMsg}</span>
     </div>
 
     <div className="space-y-6">
-
-      {/* Header */}
-      <div className="pb-5 border-b border-gray-200">
-        <h1 className="text-xl font-semibold text-gray-900">Invitations</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Invitez des comptables ou des clients à rejoindre votre espace.
-        </p>
-      </div>
-
 
       {/* Action cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -347,7 +355,7 @@ export default function InvitationsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
                   Expiration
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap w-[180px]">
                   Actions
                 </th>
               </tr>
@@ -434,7 +442,7 @@ export default function InvitationsPage() {
                     key={inv.id}
                     className={`hover:bg-gray-50 transition-colors ${isLast ? '' : 'border-b border-gray-100'}`}
                   >
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{inv.email}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-0 w-full truncate" title={inv.email}>{inv.email}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                       {inv.first_name} {inv.last_name}
                     </td>
@@ -445,17 +453,33 @@ export default function InvitationsPage() {
                       {new Date(inv.expires_at).toLocaleDateString('fr-FR')}
                     </td>
                     <td className="px-4 py-3">
-                      {canResend && (
-                        <button
-                          onClick={() => handleResend(inv.id)}
-                          disabled={loading}
-                          className="px-3 py-1 text-xs font-medium text-gray-600 border border-gray-200
-                            rounded-lg hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50
-                            transition-colors disabled:opacity-50"
-                        >
-                          {loading ? '…' : 'Renvoyer'}
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {canResend && (
+                          <button
+                            onClick={() => handleResend(inv.id)}
+                            disabled={loading}
+                            className="px-3 py-1 text-xs font-medium text-gray-600 border border-gray-200
+                              rounded-lg hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50
+                              transition-colors disabled:opacity-50"
+                          >
+                            {loading ? '…' : 'Renvoyer'}
+                          </button>
+                        )}
+                        {inv.status === 'pending' && (
+                          <>
+                            {canResend && <span className="w-px h-4 bg-gray-200" />}
+                            <button
+                              onClick={() => setConfirmDeleteId(inv.id)}
+                              disabled={loading}
+                              className="px-3 py-1 text-xs font-medium text-red-500 border border-red-100
+                                rounded-lg hover:border-red-300 hover:text-red-700 hover:bg-red-50
+                                transition-colors disabled:opacity-50"
+                            >
+                              Supprimer
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -478,6 +502,69 @@ export default function InvitationsPage() {
           onClose={() => setShowClientModal(false)}
           onCreated={handleCreated}
         />
+      )}
+
+      {/* Confirmation delete modal — rendered via portal to escape stacking contexts */}
+      {confirmDeleteId && createPortal(
+        <>
+          {/* Overlay */}
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999 }}
+            onClick={() => setConfirmDeleteId(null)}
+          />
+          {/* Modal card */}
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 420, background: '#fff', borderRadius: 12,
+            padding: '24px 32px 32px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            zIndex: 10000,
+          }}>
+            {/* Warning icon */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+              <div style={{
+                height: 48, width: 48, borderRadius: '50%',
+                background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ color: '#EF4444', fontWeight: 700, fontSize: 22 }}>!</span>
+              </div>
+            </div>
+
+            {/* Title & subtitle */}
+            <h2 style={{ textAlign: 'center', fontWeight: 700, fontSize: 18, color: '#111827', marginBottom: 8 }}>
+              Supprimer l'invitation
+            </h2>
+            <p style={{ textAlign: 'center', fontSize: 14, color: '#6B7280', marginBottom: 24 }}>
+              Êtes-vous sûr de vouloir supprimer cette invitation ? Cette action est irréversible.
+            </p>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                style={{
+                  flex: 1, height: 42, fontSize: 14, fontWeight: 500,
+                  color: '#4B5563', background: '#fff',
+                  border: '1px solid #E5E7EB', borderRadius: 8, cursor: 'pointer',
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => handleDelete(confirmDeleteId)}
+                style={{
+                  flex: 1, height: 42, fontSize: 14, fontWeight: 500,
+                  color: '#fff', background: '#EF4444',
+                  border: 'none', borderRadius: 8, cursor: 'pointer',
+                }}
+              >
+                Confirmer
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
       )}
     </div>
     </>
