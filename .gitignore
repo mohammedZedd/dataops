@@ -25,3 +25,15 @@ dist-ssr
 .vite
 .claude.env
 backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.env
+.venv
+venv/
+env/
