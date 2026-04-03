@@ -26,7 +26,7 @@ export function AddClientModal({ onClose, onSubmit }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20">
       <div className="bg-white rounded-xl shadow-xl border border-gray-100 w-full max-w-sm mx-4 p-6">
 
         {/* Header */}

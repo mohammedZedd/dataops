@@ -66,3 +66,12 @@ export async function deleteClient(id: string): Promise<void> {
     throw new Error('Impossible de supprimer le client.');
   }
 }
+
+export async function revokeClientAccess(userId: string): Promise<void> {
+  try {
+    await apiClient.patch(`/users/${userId}`, { is_active: false });
+  } catch (error) {
+    console.error(`[clients] revokeClientAccess(${userId}) :`, error);
+    throw new Error("Impossible de révoquer l'accès du client.");
+  }
+}

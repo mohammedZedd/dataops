@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Send, Mail } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { createAccountantInvitation } from '../../api/invitations';
@@ -55,9 +56,10 @@ export default function InviteAccountantModal({ companyName, onClose, onCreated 
     }
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+      className="fixed inset-0 flex items-center justify-center p-4 bg-black/40"
+      style={{ zIndex: 9999 }}
       onClick={onClose}
     >
       <div
@@ -143,6 +145,7 @@ export default function InviteAccountantModal({ companyName, onClose, onCreated 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

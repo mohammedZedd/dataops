@@ -40,3 +40,7 @@ export async function acceptInvitation(payload: InvitationAcceptPayload): Promis
 export async function resendInvitation(id: string): Promise<void> {
   await apiClient.post(`/invitations/resend/${id}`);
 }
+
+export async function revokeInvitation(id: string): Promise<void> {
+  await apiClient.delete(`/invitations/${id}`);
+}

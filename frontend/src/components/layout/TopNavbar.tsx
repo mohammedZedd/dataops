@@ -83,7 +83,7 @@ export function TopNavbar() {
 
   return (
     <header
-      className="sticky top-0 z-10 bg-white border-b border-gray-100 px-6"
+      className="sticky top-0 z-20 bg-white border-b border-gray-100 px-6"
       style={{ boxShadow: '0 1px 0 0 #f3f4f6' }}
     >
       <div className="flex items-center justify-between h-14">

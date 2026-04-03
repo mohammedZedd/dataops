@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   FileText,
 } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -142,9 +143,11 @@ function getTodayFR(): string {
 
 function getGreeting(): string {
   const h = new Date().getHours();
+  if (h < 5)  return "Bonne nuit";
   if (h < 12) return "Bonjour";
   if (h < 18) return "Bon après-midi";
-  return "Bonsoir";
+  if (h < 24) return "Bonsoir";
+  return "Bonjour";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,11 +156,9 @@ function getGreeting(): string {
 
 // ── DashboardHeader ───────────────────────────────────────────────────────────
 
-interface DashboardHeaderProps {
-  cabinetName: string;
-}
-
-function DashboardHeader({ cabinetName }: DashboardHeaderProps) {
+function DashboardHeader() {
+  const { user } = useAuth();
+  const cabinetName = user?.company_name ?? '';
   return (
     <div className="flex items-start justify-between">
       <div>
@@ -165,11 +166,10 @@ function DashboardHeader({ cabinetName }: DashboardHeaderProps) {
           Tableau de bord
         </p>
         <h1 className="text-[22px] font-bold text-gray-900 leading-tight">
-          {getGreeting()}, {cabinetName} 👋
+          {getGreeting()}{cabinetName ? `, ${cabinetName}` : ''} 👋
         </h1>
         <p className="text-[13px] text-gray-400 mt-1 capitalize">{getTodayFR()}</p>
       </div>
-
     </div>
   );
 }
@@ -485,7 +485,7 @@ export default function AccountingDashboardHome({
     <div className="space-y-5">
 
         {/* 1 — Header */}
-        <DashboardHeader cabinetName={data.cabinetName} />
+        <DashboardHeader />
 
         {/* 2 — Main summary card */}
         <SummaryCard
