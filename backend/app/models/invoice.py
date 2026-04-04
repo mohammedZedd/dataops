@@ -1,6 +1,10 @@
 import uuid
+from typing import Any, Optional
 
-from sqlalchemy import String, Date, Numeric, ForeignKey, Enum as SAEnum
+from sqlalchemy import Boolean, Float, ForeignKey, Numeric, String
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -25,5 +29,15 @@ class Invoice(Base):
         default="to_review",
         nullable=False,
     )
+
+    # ─── Accounting fields ────────────────────────────────────────────────────
+    direction: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    tva_rate: Mapped[float] = mapped_column(
+        Float, default=20.0, nullable=False, server_default="20.0"
+    )
+    accounting_validated: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
+    validated_accounts: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
     document: Mapped["Document"] = relationship("Document", back_populates="invoice")  # noqa: F821

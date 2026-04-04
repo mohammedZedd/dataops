@@ -4,7 +4,7 @@ import type { Invoice, InvoiceStatus } from '../../types';
 
 interface Props {
   invoice: Invoice;
-  onSave: (data: Partial<Omit<Invoice, 'id' | 'clientId' | 'documentId'>>) => Promise<void>;
+  onSave: (data: Partial<Pick<Invoice, 'invoice_number' | 'date' | 'supplier_name' | 'total_amount' | 'vat_amount' | 'status'>>) => Promise<void>;
   onValidate: () => Promise<void>;
 }
 
@@ -25,11 +25,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function InvoiceForm({ invoice, onSave, onValidate }: Props) {
   const [form, setForm] = useState({
-    invoiceNumber: invoice.invoiceNumber,
+    invoiceNumber: invoice.invoice_number,
     date:          invoice.date,
-    supplierName:  invoice.supplierName,
-    totalAmount:   String(invoice.totalAmount),
-    vatAmount:     String(invoice.vatAmount),
+    supplierName:  invoice.supplier_name,
+    totalAmount:   String(invoice.total_amount),
+    vatAmount:     String(invoice.vat_amount),
     status:        invoice.status as InvoiceStatus,
   });
   const [saving,  setSaving]  = useState(false);
@@ -43,12 +43,12 @@ export function InvoiceForm({ invoice, onSave, onValidate }: Props) {
   async function handleSave() {
     setSaving(true);
     await onSave({
-      invoiceNumber: form.invoiceNumber,
-      date:          form.date,
-      supplierName:  form.supplierName,
-      totalAmount:   parseFloat(form.totalAmount) || 0,
-      vatAmount:     parseFloat(form.vatAmount)   || 0,
-      status:        form.status,
+      invoice_number: form.invoiceNumber,
+      date:           form.date,
+      supplier_name:  form.supplierName,
+      total_amount:   parseFloat(form.totalAmount) || 0,
+      vat_amount:     parseFloat(form.vatAmount)   || 0,
+      status:         form.status,
     });
     setSaving(false);
     setSaved(true);
@@ -86,10 +86,10 @@ export function InvoiceForm({ invoice, onSave, onValidate }: Props) {
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Montant TTC (€)">
+          <Field label="Montant TTC (MAD)">
             <input type="number" step="0.01" value={form.totalAmount} onChange={e => change('totalAmount', e.target.value)} className={INPUT_CLS} />
           </Field>
-          <Field label="TVA (€)">
+          <Field label="TVA (MAD)">
             <input type="number" step="0.01" value={form.vatAmount} onChange={e => change('vatAmount', e.target.value)} className={INPUT_CLS} />
           </Field>
         </div>

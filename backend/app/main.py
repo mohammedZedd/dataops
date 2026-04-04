@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, clients, documents, invoices, invitations
+from app.api.routes import auth, clients, documents, invoices, invitations, users
 
 app = FastAPI(
     title="Payfit Accounting API",
@@ -25,6 +25,7 @@ app.include_router(clients.router)
 app.include_router(documents.router)
 app.include_router(invoices.router)
 app.include_router(invitations.router)
+app.include_router(users.router)
 
 
 @app.get("/health")

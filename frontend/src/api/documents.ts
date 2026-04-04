@@ -1,6 +1,19 @@
 import apiClient from './axios';
 import type { ClientDocument } from '../types';
 
+export interface AdminClientDoc {
+  id: string;
+  file_name: string;
+  file_size: number | null;
+  uploaded_at: string;
+  status: string;
+}
+
+export async function getClientDocuments(clientId: string): Promise<AdminClientDoc[]> {
+  const { data } = await apiClient.get<AdminClientDoc[]>(`/clients/${clientId}/documents`);
+  return data;
+}
+
 export async function getMyDocuments(): Promise<ClientDocument[]> {
   const { data } = await apiClient.get<ClientDocument[]>('/documents/my');
   return data;

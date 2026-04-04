@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -111,6 +112,22 @@ def invite_client(
             raise HTTPException(status_code=404, detail="Client introuvable.")
         if client.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="Client hors du cabinet.")
+
+    # Reactivation path: email already exists but user is inactive
+    existing_user = user_service.get_by_email(db, payload.email)
+    if existing_user:
+        if existing_user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Un utilisateur actif existe déjà avec cet email.",
+            )
+        existing_user.is_active = True
+        if existing_user.client_id:
+            existing_client = db.get(Client, existing_user.client_id)
+            if existing_client:
+                existing_client.is_active = True
+        db.commit()
+        return JSONResponse({"reactivated": True, "message": "Accès réactivé avec succès"})
 
     try:
         invitation = invitation_service.create_invitation(

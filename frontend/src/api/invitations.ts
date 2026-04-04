@@ -15,10 +15,12 @@ export async function createAccountantInvitation(
   return data;
 }
 
+export type ReactivationResponse = { reactivated: true; message: string };
+
 export async function createClientInvitation(
   payload: InvitationClientCreatePayload,
-): Promise<Invitation> {
-  const { data } = await apiClient.post<Invitation>('/invitations/clients', payload);
+): Promise<Invitation | ReactivationResponse> {
+  const { data } = await apiClient.post<Invitation | ReactivationResponse>('/invitations/clients', payload);
   return data;
 }
 

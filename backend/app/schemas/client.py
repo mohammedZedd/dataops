@@ -14,8 +14,11 @@ class ClientRead(BaseModel):
     id: str
     name: str
     created_at: datetime
-    invoices_to_review: int = 0   # calculé dans le service
-    documents_count: int = 0       # calculé dans le service
+    secteur_activite: Optional[str] = None
+    regime_fiscal: Optional[str] = None
+    forme_juridique: Optional[str] = None
+    invoices_to_review: int = 0
+    documents_count: int = 0
 
 
 class ClientUserRead(BaseModel):
@@ -25,6 +28,11 @@ class ClientUserRead(BaseModel):
     last_name: str
     email: str
     phone_number: Optional[str]
-    client_company_name: Optional[str]  # nom de la société du client (via clients.name)
+    client_id: Optional[str] = None
+    client_company_name: Optional[str]
+    secteur_activite: Optional[str] = None
+    regime_fiscal: Optional[str] = None
+    forme_juridique: Optional[str] = None
+    documents_count: int = 0
     is_active: bool
     created_at: datetime

@@ -11,6 +11,7 @@ export interface User {
   company_id: string;
   company_name?: string | null;
   client_id?: string | null;
+  client_company_name?: string | null;
   phone_number?: string | null;
   created_at: string;
 }
@@ -107,6 +108,8 @@ export type InvoiceStatus =
   | 'validated'   // validée par le comptable
   | 'rejected';   // rejetée (erreur de saisie / doublon)
 
+export type InvoiceDirection = 'achat' | 'vente';
+
 // ─── Entités métier ───────────────────────────────────────────────────────────
 
 /**
@@ -118,7 +121,10 @@ export interface ClientUser {
   last_name: string;
   email: string;
   phone_number?: string | null;
+  client_id?: string | null;
   client_company_name?: string | null;
+  secteur_activite?: string | null;
+  documents_count?: number;
   is_active: boolean;
   created_at: string;
 }
@@ -131,40 +137,71 @@ export interface Client {
   name: string;
   siret?: string;
   email?: string;
-  documentsCount: number;
-  invoicesToReview: number;
-  createdAt: string; // ISO date
+  secteur_activite?: string | null;
+  documents_count: number;
+  invoices_to_review: number;
+  created_at: string;
 }
 
 /**
  * Document brut déposé par le client (PDF, image, etc.).
- * Un Document peut avoir zéro ou une Invoice liée (après extraction OCR).
  */
 export interface Document {
   id: string;
   clientId: string;
   fileName: string;
   fileUrl: string;
-  mimeType: string;       // 'application/pdf' | 'image/jpeg' | ...
-  uploadedAt: string;     // ISO datetime
+  mimeType: string;
+  uploadedAt: string;
   status: DocumentStatus;
-  invoiceId?: string;     // défini après extraction réussie
+  invoiceId?: string;
 }
 
 /**
  * Facture extraite d'un Document par OCR / IA.
- * Toujours liée à un Document parent.
+ * Champs en snake_case pour correspondre à l'API FastAPI.
  */
 export interface Invoice {
   id: string;
-  documentId: string;     // référence au Document source
-  clientId: string;       // dénormalisé pour faciliter les requêtes
-  invoiceNumber: string;
-  supplierName: string;
+  document_id: string;
+  invoice_number: string;
+  supplier_name: string;
   date: string;           // ISO date 'YYYY-MM-DD'
-  totalAmount: number;    // montant TTC en euros
-  vatAmount: number;      // montant TVA en euros
+  total_amount: number;   // montant TTC
+  vat_amount: number;     // montant TVA
   status: InvoiceStatus;
+  direction?: InvoiceDirection | null;
+  tva_rate?: number;
+  accounting_validated?: boolean;
+  validated_accounts?: AccountEntry[] | null;
+}
+
+// ─── Accounting suggestion types ──────────────────────────────────────────────
+
+export interface AccountSuggestion {
+  code: string;
+  libelle: string;
+  type: 'charge' | 'tva' | 'tiers' | 'produit';
+  montant_ht?: number | null;
+  montant_tva?: number | null;
+  montant_ttc?: number | null;
+  is_primary: boolean;
+}
+
+export interface SuggestedAccountsResponse {
+  direction: InvoiceDirection;
+  tva_rate: number;
+  suggested_accounts: AccountSuggestion[];
+}
+
+export interface AccountEntry {
+  code: string;
+  libelle: string;
+  type: string;
+  montant_ht?: number | null;
+  montant_tva?: number | null;
+  montant_ttc?: number | null;
+  validated: boolean;
 }
 
 // ─── Helpers de présentation ──────────────────────────────────────────────────
@@ -181,3 +218,20 @@ export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
   processed:  'Traité',
   error:      'Erreur',
 };
+
+export const SECTEURS_ACTIVITE = [
+  'Commerce général',
+  'Commerce de détail',
+  'Import / Export',
+  'BTP (Bâtiment et Travaux Publics)',
+  'Services informatiques',
+  'Conseil et expertise',
+  'Transport et logistique',
+  'Industrie manufacturière',
+  'Agriculture et agro-alimentaire',
+  'Immobilier et promotion immobilière',
+  'Hôtellerie et restauration',
+  'Santé et pharmacie',
+  'Education et formation',
+  'Autre',
+] as const;

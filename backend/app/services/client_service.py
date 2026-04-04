@@ -27,6 +27,9 @@ def _to_read(db: Session, client: Client) -> ClientRead:
         id=client.id,
         name=client.name,
         created_at=client.created_at,
+        secteur_activite=client.secteur_activite,
+        regime_fiscal=client.regime_fiscal,
+        forme_juridique=client.forme_juridique,
         documents_count=docs_count,
         invoices_to_review=to_review,
     )

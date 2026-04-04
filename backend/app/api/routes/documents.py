@@ -113,7 +113,17 @@ def download_document(
     doc = db.get(Document, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document introuvable.")
-    _check_ownership(doc, current_user)
+
+    if current_user.role == UserRole.CLIENT:
+        _check_ownership(doc, current_user)
+    else:
+        # Admins/accountants can download documents belonging to their company's clients
+        if doc.client_id:
+            client = client_service.get_client(db, doc.client_id)
+            if not client or client.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="Accès refusé.")
+        elif doc.uploaded_by_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Accès refusé.")
 
     url = s3_service.generate_presigned_url_attachment(doc.s3_key, doc.file_name)
     return PresignedUrlResponse(url=url)

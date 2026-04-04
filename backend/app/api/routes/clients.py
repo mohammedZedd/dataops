@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_user
+from app.models.document import Document
 from app.models.user import User, UserRole
 from app.db.dependencies import get_db
 from app.schemas.client import ClientCreate, ClientRead, ClientUserRead
 from app.schemas.invoice import InvoiceRead
 from app.services import client_service, invoice_service
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
@@ -54,17 +55,26 @@ def list_client_users(
     result = []
     for u in users:
         company_name = None
+        docs_count = 0
+        secteur_activite = None
         if u.client_id:
             client = client_service.get_client(db, u.client_id)
             if client:
                 company_name = client.name
+                secteur_activite = client.secteur_activite
+            docs_count = db.scalar(
+                select(func.count()).where(Document.client_id == u.client_id)
+            ) or 0
         result.append(ClientUserRead(
             id=u.id,
             first_name=u.first_name,
             last_name=u.last_name,
             email=u.email,
             phone_number=u.phone_number,
+            client_id=u.client_id,
             client_company_name=company_name,
+            secteur_activite=secteur_activite,
+            documents_count=docs_count,
             is_active=u.is_active,
             created_at=u.created_at,
         ))

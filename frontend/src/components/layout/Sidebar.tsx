@@ -9,6 +9,7 @@ import {
   LogOut,
   Upload,
   History,
+  UserCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import type { User } from '../../types';
@@ -47,6 +48,12 @@ const NAV_CLIENT: { section: string; items: NavItem[] }[] = [
       { to: '/client/dashboard', label: 'Tableau de bord', icon: <LayoutDashboard size={16} />, end: true },
       { to: '/client/documents', label: 'Mes documents', icon: <Upload size={16} /> },
       { to: '/client/historique', label: 'Historique', icon: <History size={16} /> },
+    ],
+  },
+  {
+    section: 'Compte',
+    items: [
+      { to: '/client/profile', label: 'Mon profil', icon: <UserCircle size={16} /> },
     ],
   },
 ];

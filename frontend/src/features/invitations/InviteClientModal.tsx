@@ -9,6 +9,7 @@ import type { Invitation } from '../../types';
 interface Props {
   onClose: () => void;
   onCreated: (invitation: Invitation) => void;
+  onReactivated?: () => void;
 }
 
 const INPUT_CLASS =
@@ -16,7 +17,7 @@ const INPUT_CLASS =
   'placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 ' +
   'focus:border-blue-400 transition-colors';
 
-export default function InviteClientModal({ onClose, onCreated }: Props) {
+export default function InviteClientModal({ onClose, onCreated, onReactivated }: Props) {
   const [firstName,   setFirstName]   = useState('');
   const [lastName,    setLastName]    = useState('');
   const [email,       setEmail]       = useState('');
@@ -38,14 +39,19 @@ export default function InviteClientModal({ onClose, onCreated }: Props) {
 
     setLoading(true);
     try {
-      const created = await createClientInvitation({
+      const result = await createClientInvitation({
         first_name:   firstName.trim(),
         last_name:    lastName.trim(),
         email:        email.trim(),
         company_name: companyName.trim(),
       });
-      onCreated(created);
-      onClose();
+      if ('reactivated' in result && result.reactivated) {
+        onReactivated?.();
+        onClose();
+      } else {
+        onCreated(result as Invitation);
+        onClose();
+      }
     } catch (err: unknown) {
       const msg =
         err instanceof AxiosError

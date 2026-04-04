@@ -18,6 +18,10 @@ def _to_read(inv: Invoice) -> InvoiceRead:
         total_amount=float(inv.total_amount),
         vat_amount=float(inv.vat_amount),
         status=inv.status,
+        direction=inv.direction,
+        tva_rate=float(inv.tva_rate) if inv.tva_rate is not None else 20.0,
+        accounting_validated=bool(inv.accounting_validated),
+        validated_accounts=inv.validated_accounts,
     )
 
 

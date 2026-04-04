@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronRight, ArrowLeft, FileText } from 'lucide-react';
 import { getInvoice, getClient, updateInvoice, validateInvoice } from '../api';
 import { InvoiceForm } from '../features/invoices/InvoiceForm';
+import { AccountingSection } from '../features/invoices/AccountingSection';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import type { Client, Invoice } from '../types';
@@ -38,10 +39,10 @@ export default function DocumentDetailPage() {
   const { clientId, invoiceId } = useParams<{ clientId: string; invoiceId: string }>();
   const navigate = useNavigate();
 
-  const [client,  setClient]  = useState<Client | null>(null);
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
+  const [client,    setClient]    = useState<Client | null>(null);
+  const [invoice,   setInvoice]   = useState<Invoice | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const fetchData = useCallback(() => {
@@ -121,7 +122,7 @@ export default function DocumentDetailPage() {
           {client.name}
         </button>
         <ChevronRight size={12} />
-        <span className="text-gray-700 font-medium font-mono">{invoice.invoiceNumber}</span>
+        <span className="text-gray-700 font-medium font-mono">{invoice.invoice_number}</span>
       </nav>
 
       {/* Header */}
@@ -135,17 +136,16 @@ export default function DocumentDetailPage() {
         </button>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[18px] font-bold text-gray-900">{invoice.supplierName}</h1>
+            <h1 className="text-[18px] font-bold text-gray-900">{invoice.supplier_name}</h1>
             <StatusBadge status={invoice.status} />
           </div>
-          <p className="text-[12px] text-gray-500 mt-0.5 font-mono">{invoice.invoiceNumber}</p>
+          <p className="text-[12px] text-gray-500 mt-0.5 font-mono">{invoice.invoice_number}</p>
         </div>
       </div>
 
-      {/* Erreur sauvegarde/validation */}
       {saveError && <ErrorBanner message={saveError} />}
 
-      {/* 2-column layout */}
+      {/* 2-column layout: preview + form */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Left — aperçu */}
@@ -173,6 +173,17 @@ export default function DocumentDetailPage() {
           />
         </div>
 
+      </div>
+
+      {/* Accounting section — full width below */}
+      <div className="mt-5">
+        <AccountingSection
+          invoiceId={invoice.id}
+          secteurActivite={client.secteur_activite}
+          totalAmount={invoice.total_amount}
+          vatAmount={invoice.vat_amount}
+          onSaved={() => fetchData()}
+        />
       </div>
     </>
   );

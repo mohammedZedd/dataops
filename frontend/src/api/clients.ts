@@ -75,3 +75,22 @@ export async function revokeClientAccess(userId: string): Promise<void> {
     throw new Error("Impossible de révoquer l'accès du client.");
   }
 }
+
+export async function updateClientUser(
+  userId: string,
+  payload: {
+    first_name?: string;
+    last_name?: string;
+    phone_number?: string;
+    company_name?: string;
+    secteur_activite?: string;
+  },
+): Promise<ClientUser> {
+  try {
+    const { data } = await apiClient.patch<ClientUser>(`/users/${userId}`, payload);
+    return data;
+  } catch (error) {
+    console.error(`[clients] updateClientUser(${userId}) :`, error);
+    throw new Error('Impossible de mettre à jour les informations du client.');
+  }
+}

@@ -32,6 +32,12 @@ def get_current_user(
             detail="Utilisateur introuvable.",
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Accès révoqué.",
+        )
+
     return user
 
 

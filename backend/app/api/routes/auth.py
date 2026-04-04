@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from app.core.security import create_access_token
 from app.db.dependencies import get_db
 from app.dependencies.auth import get_current_user
+from app.models.client import Client
 from app.models.user import User, UserRole
-from app.schemas.user import LoginRequest, RegisterRequest, TokenResponse, UserRead
+from app.schemas.user import LoginRequest, MeUpdate, RegisterRequest, TokenResponse, UserRead
 from app.services import user_service, company_service, email_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -37,10 +38,47 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou mot de passe incorrect.",
         )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Votre accès a été révoqué. Contactez votre cabinet comptable.",
+        )
     token = create_access_token(user.id)
     return TokenResponse(access_token=token, user=UserRead.model_validate(user))
 
 
+def _build_user_read(db: Session, user: User) -> UserRead:
+    """Builds UserRead and populates client_company_name for CLIENT role."""
+    user_read = UserRead.model_validate(user)
+    if user.role == UserRole.CLIENT and user.client_id:
+        client = db.get(Client, user.client_id)
+        if client:
+            user_read = UserRead(**{**user_read.model_dump(), 'client_company_name': client.name})
+    return user_read
+
+
 @router.get("/me", response_model=UserRead)
-def me(current_user: User = Depends(get_current_user)):
-    return current_user
+def me(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return _build_user_read(db, current_user)
+
+
+@router.patch("/me", response_model=UserRead)
+def update_me(
+    payload: MeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    update_data = payload.model_dump(exclude_none=True)
+    company_name = update_data.pop("company_name", None)
+
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+
+    if company_name and current_user.client_id:
+        client = db.get(Client, current_user.client_id)
+        if client:
+            client.name = company_name
+
+    db.commit()
+    db.refresh(current_user)
+    return _build_user_read(db, current_user)

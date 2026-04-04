@@ -12,6 +12,7 @@ import AccountingEntryPage from './pages/AccountingEntryPage';
 import InvitationsPage from './pages/InvitationsPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ClientDocumentsPage from './pages/ClientDocumentsPage';
+import ProfilePage from './pages/ProfilePage';
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
               <Route path="accounting-entry" element={<AccountingEntryPage />} />
               <Route path="invitations" element={<InvitationsPage />} />
               <Route path="client/documents" element={<ClientDocumentsPage />} />
+              <Route path="client/profile" element={<ProfilePage />} />
             </Route>
           </Route>
 
