@@ -56,10 +56,10 @@ function AdminDashboard() {
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-        <Kpi icon={<FileText size={20} color="#3B82F6" />} bg="#EFF6FF" value={s?.documents?.this_month ?? 0} label="Documents ce mois" sub={s?.documents?.diff !== undefined ? `${s.documents.diff >= 0 ? '+' : ''}${s.documents.diff} vs mois dernier` : undefined} />
-        <Kpi icon={<Clock size={20} color="#F59E0B" />} bg="#FFF7ED" value={s?.invoices?.to_review ?? 0} label="À traiter" />
-        <Kpi icon={<CheckCircle2 size={20} color="#16A34A" />} bg="#F0FDF4" value={s?.invoices?.validated ?? 0} label="Validées" sub={`${s?.invoices?.validation_rate ?? 0}% ce mois`} />
-        <Kpi icon={<AlertTriangle size={20} color="#DC2626" />} bg="#FEF2F2" value={s?.invoices?.rejected ?? 0} label="Rejetées" />
+        <Kpi icon={<FileText size={20} color="#3B82F6" />} bg="#EFF6FF" value={s?.documents?.this_month ?? 0} label="Documents ce mois" sub={s?.documents?.diff !== undefined ? `${s.documents.diff >= 0 ? '+' : ''}${s.documents.diff} vs mois dernier` : undefined} onClick={() => navigate('/documents')} title="Voir tous les documents" />
+        <Kpi icon={<Clock size={20} color="#F59E0B" />} bg="#FFF7ED" value={s?.invoices?.to_review ?? 0} label="À traiter" onClick={() => navigate('/documents')} title="Voir les documents en attente" />
+        <Kpi icon={<CheckCircle2 size={20} color="#16A34A" />} bg="#F0FDF4" value={s?.invoices?.validated ?? 0} label="Validées" sub={`${s?.invoices?.validation_rate ?? 0}% ce mois`} onClick={() => navigate('/documents')} title="Voir les factures validées" />
+        <Kpi icon={<AlertTriangle size={20} color="#DC2626" />} bg="#FEF2F2" value={s?.invoices?.rejected ?? 0} label="Rejetées" onClick={() => navigate('/documents')} title="Voir les factures rejetées" />
       </div>
 
       {/* Two columns */}
@@ -83,7 +83,9 @@ function AdminDashboard() {
               { label: 'Traitement', count: s?.monthly_tracking?.processing?.count ?? 0, status: s?.monthly_tracking?.processing?.status ?? 'pending', desc: 'pièces extraites' },
               { label: 'Validation', count: s?.monthly_tracking?.validation?.count ?? 0, status: s?.monthly_tracking?.validation?.status ?? 'pending', desc: 'factures validées' },
             ].map((step, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: '#F9FAFB', borderRadius: 8 }}>
+              <div key={i} onClick={() => navigate('/documents')} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: '#F9FAFB', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#EFF6FF'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = '#F9FAFB'; }}>
                 <div style={{ width: 28, height: 28, borderRadius: '50%', background: step.status === 'completed' ? '#DCFCE7' : step.status === 'in_progress' ? '#FEF3C7' : '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
                   {step.status === 'completed' ? '✅' : step.status === 'in_progress' ? '⏳' : '○'}
                 </div>
@@ -107,7 +109,9 @@ function AdminDashboard() {
             {(s?.invoices_to_validate ?? []).length === 0 ? (
               <p style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '16px 0' }}>Aucune facture en attente</p>
             ) : (s?.invoices_to_validate ?? []).map(inv => (
-              <div key={inv.id} style={{ padding: '10px 0', borderBottom: '1px solid #F3F4F6', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div key={inv.id} onClick={() => navigate('/documents')} style={{ padding: '10px 4px', borderBottom: '1px solid #F3F4F6', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 6, transition: 'background 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F8FAFC'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
                 <div><p style={{ fontSize: 14, fontWeight: 500, color: '#111827' }}>{inv.supplier_name || inv.invoice_number || 'Facture'}</p><p style={{ fontSize: 12, color: '#6B7280' }}>{inv.client_name}</p></div>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{inv.total_amount ? `${inv.total_amount.toLocaleString('fr-MA')} MAD` : '—'}</span>
               </div>
@@ -136,9 +140,11 @@ function AdminDashboard() {
   );
 }
 
-function Kpi({ icon, bg, value, label, sub }: { icon: React.ReactNode; bg: string; value: number; label: string; sub?: string }) {
+function Kpi({ icon, bg, value, label, sub, onClick, title }: { icon: React.ReactNode; bg: string; value: number; label: string; sub?: string; onClick?: () => void; title?: string }) {
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+    <div title={title} onClick={onClick} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', cursor: onClick ? 'pointer' : 'default', transition: 'all 0.2s' }}
+      onMouseEnter={e => { if (onClick) { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLDivElement).style.borderColor = '#BFDBFE'; } }}
+      onMouseLeave={e => { if (onClick) { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)'; (e.currentTarget as HTMLDivElement).style.borderColor = '#E5E7EB'; } }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
         <span style={{ fontSize: 28, fontWeight: 700, color: '#111827' }}>{value}</span>
