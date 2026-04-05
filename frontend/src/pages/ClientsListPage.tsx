@@ -1107,7 +1107,7 @@ export default function ClientsListPage() {
     );
   }
 
-  const COLS = ['NOM', 'EMAIL', 'TÉLÉPHONE', 'ENTREPRISE', 'INSCRIPTION', 'DOCUMENTS', 'STATUT', 'ACTIONS'];
+  const COLS = ['NOM', 'EMAIL', 'TÉLÉPHONE', 'ENTREPRISE', 'INSCRIPTION', 'DOCUMENTS', 'STATUT', 'ACTIONS', ''];
 
   return (
     <>
@@ -1387,10 +1387,11 @@ export default function ClientsListPage() {
                               <RotateCcw size={15} />
                             </button>
                           )}
-                          {c.client_id && (
-                            <ChevronRight size={15} color="#D1D5DB" />
-                          )}
                         </div>
+                      </td>
+                      {/* Navigate arrow — NOT inside stopPropagation */}
+                      <td style={{ padding: '16px 4px 16px 0', width: 20 }}>
+                        {c.client_id && <ChevronRight size={15} color="#D1D5DB" />}
                       </td>
                     </tr>
                   );
