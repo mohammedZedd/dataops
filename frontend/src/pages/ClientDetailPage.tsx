@@ -237,9 +237,11 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #F3F4F6', marginBottom: 28 }}>
-        {(['details', 'documents'] as const).map(tab => (
-          <button key={tab} onClick={() => switchTab(tab)} style={{
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '2px solid #F3F4F6', marginBottom: 28 }}>
+        {(['details', 'documents'] as const).map((tab, i) => (
+          <div key={tab} style={{ display: 'contents' }}>
+          {i > 0 && <div style={{ width: 1, height: 20, background: '#E5E7EB', margin: '0 4px', flexShrink: 0 }} />}
+          <button onClick={() => switchTab(tab)} style={{
             padding: '14px 20px', fontSize: 14, fontWeight: activeTab === tab ? 600 : 400,
             color: activeTab === tab ? '#3B82F6' : '#6B7280',
             borderBottom: activeTab === tab ? '2px solid #3B82F6' : '2px solid transparent',
@@ -254,6 +256,7 @@ export default function ClientDetailPage() {
               </span>
             )}
           </button>
+          </div>
         ))}
       </div>
 
