@@ -34,7 +34,7 @@ export function ChatWidget() {
         setUnread(c.unread_count ?? 0);
       }
     } catch { /* */ }
-  }, []);
+  }, [isClient]);
 
   const fetchMsgs = useCallback(async () => {
     if (!convId) return;
