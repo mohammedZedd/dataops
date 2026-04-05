@@ -4,7 +4,7 @@ import {
   ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Calendar,
   User, Mail, Phone, Building2, Briefcase, FileText, ImageIcon,
   FileSpreadsheet, File as FileIcon, FolderOpen, Download,
-  Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw,
+  Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic,
 } from 'lucide-react';
 import { getClient, getClientUsers, updateClientUser, revokeClientAccess } from '../api/clients';
 import { getClientDocuments, getPresignedDownloadUrl, createInvoiceFromDocument } from '../api/documents';
@@ -19,6 +19,7 @@ function fileIcon(name: string) {
   if (ext === 'pdf') return <FileText size={18} color="#EF4444" />;
   if (['jpg', 'jpeg', 'png'].includes(ext)) return <ImageIcon size={18} color="#3B82F6" />;
   if (['xlsx', 'xls'].includes(ext)) return <FileSpreadsheet size={18} color="#16A34A" />;
+  if (['webm', 'mp3', 'mp4', 'ogg', 'wav'].includes(ext)) return <Mic size={18} color="#7C3AED" />;
   return <FileIcon size={18} color="#6B7280" />;
 }
 

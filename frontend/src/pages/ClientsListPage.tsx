@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Users, X, CheckCircle, User, Mail, Phone, Building2, Calendar, Ban, Pencil, Lock, Eye, Trash2, Plus, ChevronsUpDown, Search, FolderOpen, FileText, ImageIcon, FileSpreadsheet, File, ChevronDown, ChevronUp, ChevronRight, Download, Briefcase, ClipboardList, Loader2 } from 'lucide-react';
+import { Users, X, CheckCircle, User, Mail, Phone, Building2, Calendar, Ban, Pencil, Lock, Eye, Trash2, Plus, ChevronsUpDown, Search, FolderOpen, FileText, ImageIcon, FileSpreadsheet, File, ChevronDown, ChevronUp, ChevronRight, Download, Briefcase, ClipboardList, Loader2, Mic } from 'lucide-react';
 import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
 import { getClientUsers, revokeClientAccess, updateClientUser } from '../api/clients';
 import { getClientDocuments, getPresignedDownloadUrl, createInvoiceFromDocument } from '../api/documents';
@@ -595,9 +595,10 @@ interface ClientDocsModalProps {
 
 function fileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  if (ext === 'pdf')                            return <FileText    size={18} color="#EF4444" />;
-  if (['jpg', 'jpeg', 'png'].includes(ext))     return <ImageIcon   size={18} color="#3B82F6" />;
-  if (['xlsx', 'xls'].includes(ext))            return <FileSpreadsheet size={18} color="#16A34A" />;
+  if (ext === 'pdf')                                         return <FileText    size={18} color="#EF4444" />;
+  if (['jpg', 'jpeg', 'png'].includes(ext))                  return <ImageIcon   size={18} color="#3B82F6" />;
+  if (['xlsx', 'xls'].includes(ext))                         return <FileSpreadsheet size={18} color="#16A34A" />;
+  if (['webm', 'mp3', 'mp4', 'ogg', 'wav'].includes(ext))   return <Mic         size={18} color="#7C3AED" />;
   return <File size={18} color="#6B7280" />;
 }
 
@@ -627,12 +628,18 @@ function groupByMonth(docs: AdminClientDoc[]): { key: string; label: string; doc
     });
 }
 
+function isAudioDoc(doc: AdminClientDoc): boolean {
+  return doc.doc_type === 'audio' || /\.(webm|mp3|mp4|ogg|wav)$/i.test(doc.file_name);
+}
+
 function ClientDocsModal({ client, onClose, onNavigateToInvoice }: ClientDocsModalProps) {
   const [docs,     setDocs]     = useState<AdminClientDoc[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [creatingInvoice, setCreatingInvoice] = useState<string | null>(null);
+  const [playingAudioId,  setPlayingAudioId]  = useState<string | null>(null);
+  const [playingAudioUrl, setPlayingAudioUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client.client_id) { setLoading(false); return; }
@@ -679,6 +686,19 @@ function ClientDocsModal({ client, onClose, onNavigateToInvoice }: ClientDocsMod
     if (!client.client_id) return;
     onClose();
     onNavigateToInvoice(client.client_id, invoiceId);
+  }
+
+  async function toggleAudioPlay(docId: string) {
+    if (playingAudioId === docId) {
+      setPlayingAudioId(null);
+      setPlayingAudioUrl(null);
+      return;
+    }
+    try {
+      const url = await getPresignedDownloadUrl(docId);
+      setPlayingAudioId(docId);
+      setPlayingAudioUrl(url);
+    } catch { /* ignore */ }
   }
 
   const initials = `${client.first_name.charAt(0)}${client.last_name.charAt(0)}`.toUpperCase();
@@ -807,8 +827,8 @@ function ClientDocsModal({ client, onClose, onNavigateToInvoice }: ClientDocsMod
 
                   {/* Document rows */}
                   {expanded.has(key) && groupDocs.map((doc, idx) => (
+                    <div key={doc.id}>
                     <div
-                      key={doc.id}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 12,
                         padding: '10px 16px',
@@ -841,32 +861,52 @@ function ClientDocsModal({ client, onClose, onNavigateToInvoice }: ClientDocsMod
                         </p>
                       </div>
 
-                      {/* Invoice status badge */}
-                      <span style={{
-                        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-                        whiteSpace: 'nowrap', flexShrink: 0,
-                        background: !doc.invoice_id ? '#F3F4F6'
-                          : doc.invoice_status === 'validated' ? '#DCFCE7'
-                          : doc.invoice_status === 'rejected' ? '#FEE2E2'
-                          : '#FEF3C7',
-                        color: !doc.invoice_id ? '#9CA3AF'
-                          : doc.invoice_status === 'validated' ? '#16A34A'
-                          : doc.invoice_status === 'rejected' ? '#DC2626'
-                          : '#92400E',
-                      }}>
-                        {!doc.invoice_id ? 'Aucune facture'
-                          : doc.invoice_status === 'validated' ? 'Validée'
-                          : doc.invoice_status === 'rejected' ? 'Rejetée'
-                          : 'À traiter'}
-                      </span>
+                      {/* Badge: Audio / Invoice status / Aucune facture */}
+                      {isAudioDoc(doc) ? (
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12, whiteSpace: 'nowrap', flexShrink: 0, background: '#F5F3FF', color: '#7C3AED', border: '1px solid #DDD6FE' }}>
+                          Audio
+                        </span>
+                      ) : (
+                        <span style={{
+                          fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
+                          whiteSpace: 'nowrap', flexShrink: 0,
+                          background: !doc.invoice_id ? '#F3F4F6'
+                            : doc.invoice_status === 'validated' ? '#DCFCE7'
+                            : doc.invoice_status === 'rejected' ? '#FEE2E2'
+                            : '#FEF3C7',
+                          color: !doc.invoice_id ? '#9CA3AF'
+                            : doc.invoice_status === 'validated' ? '#16A34A'
+                            : doc.invoice_status === 'rejected' ? '#DC2626'
+                            : '#92400E',
+                        }}>
+                          {!doc.invoice_id ? 'Aucune facture'
+                            : doc.invoice_status === 'validated' ? 'Validée'
+                            : doc.invoice_status === 'rejected' ? 'Rejetée'
+                            : 'À traiter'}
+                        </span>
+                      )}
 
                       {/* Upload date */}
                       <span style={{ fontSize: 12, color: '#9CA3AF', whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {new Date(doc.uploaded_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                       </span>
 
-                      {/* Invoice action button */}
-                      {doc.invoice_id ? (
+                      {/* Action button: play audio OR view/create invoice */}
+                      {isAudioDoc(doc) ? (
+                        <button
+                          onClick={() => toggleAudioPlay(doc.id)}
+                          title={playingAudioId === doc.id ? 'Arrêter' : 'Écouter'}
+                          style={{
+                            height: 32, width: 32, borderRadius: 8, border: 'none',
+                            background: playingAudioId === doc.id ? '#F5F3FF' : 'transparent',
+                            cursor: 'pointer', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#7C3AED', transition: 'all 0.15s',
+                          }}
+                        >
+                          {playingAudioId === doc.id ? <X size={15} /> : <Eye size={15} />}
+                        </button>
+                      ) : doc.invoice_id ? (
                         <button
                           onClick={() => handleViewInvoice(doc.invoice_id!)}
                           title="Voir la facture"
@@ -876,14 +916,8 @@ function ClientDocsModal({ client, onClose, onNavigateToInvoice }: ClientDocsMod
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             color: '#16A34A', transition: 'all 0.15s',
                           }}
-                          onMouseEnter={(e) => {
-                            const b = e.currentTarget as HTMLButtonElement;
-                            b.style.background = '#DCFCE7';
-                          }}
-                          onMouseLeave={(e) => {
-                            const b = e.currentTarget as HTMLButtonElement;
-                            b.style.background = 'transparent';
-                          }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#DCFCE7'; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
                         >
                           <Eye size={15} />
                         </button>
@@ -899,18 +933,10 @@ function ClientDocsModal({ client, onClose, onNavigateToInvoice }: ClientDocsMod
                             color: '#9CA3AF', transition: 'all 0.15s',
                             opacity: creatingInvoice === doc.id ? 0.5 : 1,
                           }}
-                          onMouseEnter={(e) => {
-                            const b = e.currentTarget as HTMLButtonElement;
-                            b.style.background = '#EFF6FF'; b.style.color = '#3B82F6';
-                          }}
-                          onMouseLeave={(e) => {
-                            const b = e.currentTarget as HTMLButtonElement;
-                            b.style.background = 'transparent'; b.style.color = '#9CA3AF';
-                          }}
+                          onMouseEnter={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#EFF6FF'; b.style.color = '#3B82F6'; }}
+                          onMouseLeave={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'transparent'; b.style.color = '#9CA3AF'; }}
                         >
-                          {creatingInvoice === doc.id
-                            ? <Loader2 size={15} className="animate-spin" />
-                            : <ClipboardList size={15} />}
+                          {creatingInvoice === doc.id ? <Loader2 size={15} className="animate-spin" /> : <ClipboardList size={15} />}
                         </button>
                       )}
 
@@ -935,6 +961,26 @@ function ClientDocsModal({ client, onClose, onNavigateToInvoice }: ClientDocsMod
                       >
                         <Download size={15} />
                       </button>
+                    </div>
+                    {/* Inline audio player */}
+                    {playingAudioId === doc.id && playingAudioUrl && (
+                      <div style={{
+                        padding: '12px 20px 12px 48px', background: '#F5F3FF',
+                        borderTop: '1px solid #DDD6FE',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, color: '#7C3AED', fontWeight: 600, textTransform: 'uppercase' }}>Note vocale</span>
+                          <button onClick={() => setPlayingAudioId(null)}
+                            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14 }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                        <audio controls autoPlay style={{ width: '100%', height: 32 }} src={playingAudioUrl} />
+                        {doc.description && (
+                          <p style={{ margin: '6px 0 0', fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>{doc.description}</p>
+                        )}
+                      </div>
+                    )}
                     </div>
                   ))}
                 </div>
