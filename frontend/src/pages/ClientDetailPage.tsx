@@ -99,6 +99,8 @@ export default function ClientDetailPage() {
 
   // Revoke
   const [revoking, setRevoking] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [showReactivateModal, setShowReactivateModal] = useState(false);
   const [fiscalOpen, setFiscalOpen] = useState(false);
 
   // Admin upload
@@ -399,12 +401,12 @@ export default function ClientDetailPage() {
           {clientUser && (
             <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E5E7EB' }}>
               {isActive ? (
-                <button onClick={handleRevoke} disabled={revoking} style={{ padding: '10px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, border: '1px solid #FED7AA', background: '#fff', color: '#C2410C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: revoking ? 0.6 : 1 }}>
-                  <Ban size={14} /> {revoking ? 'En cours…' : "Limiter l'accès"}
+                <button onClick={() => setShowLimitModal(true)} style={{ padding: '10px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, border: '1px solid #FED7AA', background: '#fff', color: '#C2410C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Ban size={14} /> Limiter l'accès
                 </button>
               ) : (
-                <button onClick={handleReactivate} disabled={revoking} style={{ padding: '10px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, border: '1px solid #BBF7D0', background: '#fff', color: '#16A34A', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: revoking ? 0.6 : 1 }}>
-                  <RefreshCw size={14} /> {revoking ? 'En cours…' : "Réactiver l'accès"}
+                <button onClick={() => setShowReactivateModal(true)} style={{ padding: '10px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, border: '1px solid #BBF7D0', background: '#fff', color: '#16A34A', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <RefreshCw size={14} /> Réactiver l'accès
                 </button>
               )}
             </div>
@@ -554,6 +556,44 @@ export default function ClientDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Limit access confirmation modal */}
+      {showLimitModal && (
+        <>
+          <div onClick={() => !revoking && setShowLimitModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 420, background: '#fff', borderRadius: 16, boxShadow: '0 25px 60px rgba(0,0,0,0.15)', zIndex: 10000, padding: '28px 28px 24px' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#FFF7ED', border: '1px solid #FED7AA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 16px' }}>🚫</div>
+            <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: '#111827', textAlign: 'center' }}>Limiter l'accès</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 1.6 }}>
+              Voulez-vous limiter l'accès de <strong style={{ color: '#111827' }}>{displayName}</strong> ?<br />
+              <span style={{ fontSize: 13 }}>Le client pourra consulter ses documents mais ne pourra plus en envoyer.</span>
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowLimitModal(false)} disabled={revoking} style={{ flex: 1, height: 42, background: '#fff', border: '1px solid #E5E7EB', color: '#374151', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>Annuler</button>
+              <button onClick={async () => { await handleRevoke(); setShowLimitModal(false); }} disabled={revoking} style={{ flex: 1, height: 42, background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600, opacity: revoking ? 0.6 : 1 }}>{revoking ? 'En cours…' : 'Confirmer'}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Reactivate confirmation modal */}
+      {showReactivateModal && (
+        <>
+          <div onClick={() => !revoking && setShowReactivateModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 420, background: '#fff', borderRadius: 16, boxShadow: '0 25px 60px rgba(0,0,0,0.15)', zIndex: 10000, padding: '28px 28px 24px' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 16px' }}>↺</div>
+            <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: '#111827', textAlign: 'center' }}>Réactiver l'accès</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 1.6 }}>
+              Voulez-vous restaurer l'accès de <strong style={{ color: '#111827' }}>{displayName}</strong> ?<br />
+              <span style={{ fontSize: 13 }}>Le client pourra à nouveau envoyer des documents.</span>
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowReactivateModal(false)} disabled={revoking} style={{ flex: 1, height: 42, background: '#fff', border: '1px solid #E5E7EB', color: '#374151', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>Annuler</button>
+              <button onClick={async () => { await handleReactivate(); setShowReactivateModal(false); }} disabled={revoking} style={{ flex: 1, height: 42, background: '#16A34A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600, opacity: revoking ? 0.6 : 1 }}>{revoking ? 'En cours…' : 'Confirmer'}</button>
+            </div>
+          </div>
+        </>
       )}
     </>
   );
