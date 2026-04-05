@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Users, X, CheckCircle, User, Mail, Phone, Building2, Calendar, Ban, Pencil, Lock, Eye, Trash2, Plus, ChevronsUpDown, Search, FolderOpen, FileText, ImageIcon, FileSpreadsheet, File, ChevronDown, ChevronUp, ChevronRight, Download, Briefcase, ClipboardList, Loader2, Mic } from 'lucide-react';
+import { Users, X, CheckCircle, User, Mail, Phone, Building2, Calendar, Ban, Pencil, Lock, Eye, Trash2, Plus, ChevronsUpDown, Search, FolderOpen, FileText, ImageIcon, FileSpreadsheet, File, ChevronDown, ChevronUp, ChevronRight, Download, Briefcase, ClipboardList, Loader2, Mic, RotateCcw } from 'lucide-react';
 import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
-import { getClientUsers, revokeClientAccess, updateClientUser } from '../api/clients';
+import { getClientUsers, revokeClientAccess, restoreClientAccess, updateClientUser } from '../api/clients';
 import { getClientDocuments, getPresignedDownloadUrl, createInvoiceFromDocument } from '../api/documents';
 import type { AdminClientDoc } from '../api/documents';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
@@ -1003,7 +1003,8 @@ export default function ClientsListPage() {
   const [error,         setError]         = useState<string | null>(null);
   const [selected,      setSelected]      = useState<ClientUser | null>(null);
   const [openInEdit,    setOpenInEdit]    = useState(false);
-  const [revokeTarget,  setRevokeTarget]  = useState<ClientUser | null>(null);
+  const [revokeTarget,      setRevokeTarget]      = useState<ClientUser | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState<ClientUser | null>(null);
   const [revoking,      setRevoking]      = useState(false);
   const [showInvite,    setShowInvite]    = useState(false);
   const [docsTarget,    setDocsTarget]    = useState<ClientUser | null>(null);
@@ -1050,6 +1051,22 @@ export default function ClientsListPage() {
     } finally {
       setRevoking(false);
       setRevokeTarget(null);
+    }
+  }
+
+  async function handleReactivateFromTable() {
+    if (!reactivateTarget) return;
+    setRevoking(true);
+    try {
+      await restoreClientAccess(reactivateTarget.id);
+      setClients((prev) => prev.map((c) => c.id === reactivateTarget.id ? { ...c, is_active: true } : c));
+      if (selected?.id === reactivateTarget.id) setSelected((prev) => prev ? { ...prev, is_active: true } : null);
+      setSuccessToast('reactivated');
+      setTimeout(() => setSuccessToast(null), 3000);
+    } catch { /* ignore */ }
+    finally {
+      setRevoking(false);
+      setReactivateTarget(null);
     }
   }
 
@@ -1331,6 +1348,7 @@ export default function ClientsListPage() {
                       {/* ACTIONS */}
                       <td style={{ padding: '16px 12px' }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {/* Edit — disabled when inactive */}
                           <button
                             onClick={c.is_active ? () => openDetail(c, true) : undefined}
                             title={c.is_active ? 'Modifier' : undefined}
@@ -1340,24 +1358,35 @@ export default function ClientsListPage() {
                             style={{
                               height: 32, width: 32,
                               color: c.is_active ? undefined : '#D1D5DB',
-                              opacity: c.is_active ? undefined : 0.4,
-                              cursor: c.is_active ? undefined : 'not-allowed',
+                              opacity: c.is_active ? undefined : 0.35,
+                              cursor: c.is_active ? 'pointer' : 'not-allowed',
                               pointerEvents: c.is_active ? undefined : 'none',
                             }}
                           >
                             <Pencil size={15} />
                           </button>
-                          <button
-                            onClick={() => setRevokeTarget(c)}
-                            disabled={!c.is_active}
-                            title={c.is_active ? "Révoquer l'accès" : 'Accès déjà révoqué'}
-                            className="flex items-center justify-center text-gray-400
-                              hover:text-red-500 hover:bg-red-50 transition-colors rounded-lg
-                              disabled:opacity-30 disabled:cursor-not-allowed"
-                            style={{ height: 32, width: 32 }}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {/* Revoke / Reactivate based on status */}
+                          {c.is_active ? (
+                            <button
+                              onClick={() => setRevokeTarget(c)}
+                              title="Limiter l'accès"
+                              className="flex items-center justify-center text-gray-400
+                                hover:text-red-500 hover:bg-red-50 transition-colors rounded-lg"
+                              style={{ height: 32, width: 32 }}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setReactivateTarget(c)}
+                              title="Réactiver l'accès"
+                              className="flex items-center justify-center text-emerald-500
+                                hover:text-emerald-600 hover:bg-emerald-50 transition-colors rounded-lg"
+                              style={{ height: 32, width: 32, cursor: 'pointer' }}
+                            >
+                              <RotateCcw size={15} />
+                            </button>
+                          )}
                           {c.client_id && (
                             <ChevronRight size={15} color="#D1D5DB" />
                           )}
@@ -1390,6 +1419,41 @@ export default function ClientsListPage() {
           onConfirm={handleRevokeFromTable}
           onCancel={() => !revoking && setRevokeTarget(null)}
         />
+      )}
+
+      {/* Reactivate confirmation */}
+      {reactivateTarget && createPortal(
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999 }}
+            onClick={() => !revoking && setReactivateTarget(null)} />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+            width: 380, background: '#fff', borderRadius: 16, zIndex: 10000, padding: '28px 24px',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.15)',
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+              <div style={{ height: 48, width: 48, borderRadius: '50%', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <RotateCcw size={22} color="#16A34A" />
+              </div>
+              <p style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>Réactiver l'accès</p>
+              <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
+                Voulez-vous réactiver l'accès de <strong>{reactivateTarget.first_name} {reactivateTarget.last_name}</strong> ?
+                Il/Elle pourra à nouveau se connecter et envoyer des documents.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => setReactivateTarget(null)} disabled={revoking}
+                style={{ flex: 1, padding: '10px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', color: '#374151', cursor: 'pointer' }}>
+                Annuler
+              </button>
+              <button onClick={handleReactivateFromTable} disabled={revoking}
+                style={{ flex: 1, padding: '10px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: '#16A34A', color: '#fff', cursor: 'pointer', opacity: revoking ? 0.6 : 1 }}>
+                {revoking ? 'Réactivation…' : 'Confirmer'}
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
       )}
 
       {/* Invite client modal */}
