@@ -48,6 +48,11 @@ class MeUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 # ─── Réponses ─────────────────────────────────────────────────────────────────
 
 class UserRead(BaseModel):

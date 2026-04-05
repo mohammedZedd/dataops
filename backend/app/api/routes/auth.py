@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token
+from app.core.security import create_access_token, verify_password, hash_password
 from app.db.dependencies import get_db
 from app.dependencies.auth import get_current_user
 from app.models.client import Client
 from app.models.user import User, UserRole
-from app.schemas.user import LoginRequest, MeUpdate, RegisterRequest, TokenResponse, UserRead
+from app.schemas.user import ChangePasswordRequest, LoginRequest, MeUpdate, RegisterRequest, TokenResponse, UserRead
 from app.services import user_service, company_service, email_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -91,3 +91,18 @@ def update_me(
     db.commit()
     db.refresh(current_user)
     return _build_user_read(db, current_user)
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Mot de passe actuel incorrect.")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Le nouveau mot de passe doit faire au moins 8 caractères.")
+    current_user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"message": "Mot de passe modifié avec succès."}
