@@ -9,6 +9,7 @@ import {
   LogOut,
   Upload,
   History,
+  MessageSquare,
   UserCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -29,6 +30,7 @@ const NAV_ADMIN: { section: string; items: NavItem[] }[] = [
       { to: '/clients', label: 'Clients', icon: <Users size={16} /> },
       { to: '/documents', label: 'Documents', icon: <FileText size={16} /> },
       { to: '/accounting-entry', label: 'Création comptable', icon: <BookOpen size={16} /> },
+      { to: '/chat', label: 'Messages', icon: <MessageSquare size={16} /> },
     ],
   },
   {

@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
 import { WelcomeOverlay } from '../WelcomeOverlay';
+import { ChatWidget } from '../ChatWidget';
 
 export function AppLayout() {
   return (
@@ -14,6 +15,7 @@ export function AppLayout() {
         </div>
       </main>
       <WelcomeOverlay />
+      <ChatWidget />
     </div>
   );
 }
