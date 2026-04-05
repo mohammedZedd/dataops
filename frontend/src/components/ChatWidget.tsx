@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { soundService } from '../utils/soundService';
 
 interface Msg { id: string; sender_id: string; sender_role: string; content: string; message_type: string; file_name?: string; file_url?: string; document_id?: string; is_read: boolean; created_at: string }
-interface Conv { id: string; client_name: string | null; client_company: string | null; unread_count: number; last_message: { content: string; created_at: string } | null; last_message_at: string | null }
+interface Conv { id: string; client_id: string | null; client_name: string | null; client_company: string | null; unread_count: number; last_message: { content: string; created_at: string } | null; last_message_at: string | null }
 
 function timeAgo(d: string) {
   const ms = Date.now() - new Date(d).getTime();

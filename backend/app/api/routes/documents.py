@@ -392,7 +392,18 @@ def list_my_documents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return document_service.get_documents_by_user(db, current_user.id)
+    # Return docs uploaded by user + docs sent to their client_id by cabinet
+    from sqlalchemy import or_
+    docs = (
+        db.query(Document)
+        .filter(or_(
+            Document.uploaded_by_user_id == current_user.id,
+            Document.client_id == current_user.client_id,
+        ) if current_user.client_id else Document.uploaded_by_user_id == current_user.id)
+        .order_by(Document.uploaded_at.desc())
+        .all()
+    )
+    return [document_service._to_read(d) for d in docs]
 
 
 # ─── Existing accounting routes (admin/accountant) ────────────────────────────
