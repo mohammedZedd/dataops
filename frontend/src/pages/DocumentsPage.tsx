@@ -4,7 +4,7 @@ import {
   Search, Loader2, FolderOpen, AlertTriangle, FileText, ImageIcon,
   FileSpreadsheet, Mic, Eye, ClipboardList, Download, X, ChevronLeft, ChevronRight,
 } from 'lucide-react';
-import { getAllDocuments, getDocumentStats, getDocumentsByClientSummary, getPresignedPreviewUrl, getPresignedDownloadUrl, createInvoiceFromDocument } from '../api/documents';
+import { getAllDocuments, getDocumentStats, getDocumentsByClientSummary, getPresignedPreviewUrl, getPresignedDownloadUrl, createInvoiceFromDocument, markDocumentViewed } from '../api/documents';
 import type { DocumentStats, ClientDocSummary, AdminClientDoc } from '../api/documents';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ const DOC_STATUS: Record<string, { bg: string; color: string; label: string }> =
   error: { bg: '#FEF2F2', color: '#DC2626', label: 'Erreur' },
 };
 
-const STATUT_PILLS = ['Tous', 'En attente', 'Validé', 'Rejeté'] as const;
+const STATUT_PILLS = ['Tous', 'Nouveaux', 'En attente', 'Validé', 'Rejeté'] as const;
 type Statut = typeof STATUT_PILLS[number];
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -154,6 +154,7 @@ export default function DocumentsPage() {
       if (!d.file_name.toLowerCase().includes(q) && !(d.client_name ?? '').toLowerCase().includes(q)) return false;
     }
     if (typeFilter && fileType(d.file_name) !== typeFilter) return false;
+    if (statusFilter === 'Nouveaux' && !d.is_new) return false;
     if (statusFilter === 'En attente' && d.invoice_status && d.invoice_status !== 'to_review') return false;
     if (statusFilter === 'Validé' && d.invoice_status !== 'validated') return false;
     if (statusFilter === 'Rejeté' && d.invoice_status !== 'rejected') return false;
@@ -171,7 +172,10 @@ export default function DocumentsPage() {
   const hasFilters = search || statusFilter !== 'Tous' || typeFilter || periodFilter !== 'this_month';
   const urgentClients = clientSummaries.filter(c => c.urgent_count > 0);
 
-  async function handlePreview(id: string) { try { window.open(await getPresignedPreviewUrl(id), '_blank'); } catch { /* */ } }
+  async function handlePreview(doc: AdminClientDoc) {
+    if (doc.is_new) { markDocumentViewed(doc.id).catch(() => {}); setDocs(p => p.map(d => d.id === doc.id ? { ...d, is_new: false } : d)); }
+    try { window.open(await getPresignedPreviewUrl(doc.id), '_blank'); } catch { /* */ }
+  }
   async function handleDownload(id: string) { try { window.open(await getPresignedDownloadUrl(id), '_blank'); } catch { /* */ } }
   async function handleCreate(doc: AdminClientDoc) {
     if (!doc.client_id) return; setCreatingInv(doc.id);
@@ -335,14 +339,16 @@ export default function DocumentsPage() {
               {paged.map((doc, idx) => {
                 const t = fileType(doc.file_name);
                 const isAudio = t === 'audio';
+                const isNew = doc.is_new;
                 const tb = TYPE_BADGE[t] ?? TYPE_BADGE.autre;
                 const ds = DOC_STATUS[doc.status] ?? DOC_STATUS.uploaded;
                 const invS = doc.invoice_status ? INV_BADGE[doc.invoice_status] : null;
-                const accent = isAudio ? '#7C3AED' : invS?.color === '#16A34A' ? '#16A34A' : invS?.color === '#C2410C' ? '#F59E0B' : invS?.color === '#DC2626' ? '#EF4444' : '#E5E7EB';
+                const accent = isNew ? '#3B82F6' : isAudio ? '#7C3AED' : invS?.color === '#16A34A' ? '#16A34A' : invS?.color === '#C2410C' ? '#F59E0B' : invS?.color === '#DC2626' ? '#EF4444' : '#E5E7EB';
+                const rowBg = isNew ? '#F0F9FF' : '#fff';
                 return (
-                  <tr key={doc.id} style={{ borderBottom: '1px solid #F3F4F6', boxShadow: `inset 4px 0 0 0 ${accent}`, transition: 'background 0.1s' }}
+                  <tr key={doc.id} style={{ borderBottom: '1px solid #F3F4F6', boxShadow: `inset 4px 0 0 0 ${accent}`, transition: 'background 0.1s', background: rowBg }}
                     onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#F8FAFC'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#fff'; }}>
+                    onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = rowBg; }}>
                     <td style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(doc.client_name ?? '?').charAt(0).toUpperCase()}</div>
@@ -353,7 +359,10 @@ export default function DocumentsPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {fileIcon(doc.file_name)}
                         <div>
-                          <p style={{ fontSize: 13, fontWeight: 500, color: '#111827', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</p>
+                          <p style={{ fontSize: 13, fontWeight: 500, color: '#111827', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {doc.file_name}
+                            {isNew && <span style={{ background: '#EFF6FF', color: '#3B82F6', border: '1px solid #BFDBFE', borderRadius: 20, padding: '1px 7px', fontSize: 10, fontWeight: 700, letterSpacing: '0.3px', textTransform: 'uppercase', flexShrink: 0 }}>Nouveau</span>}
+                          </p>
                           <p style={{ fontSize: 11, color: '#9CA3AF' }}>{formatSize(doc.file_size)}</p>
                         </div>
                       </div>
@@ -368,7 +377,7 @@ export default function DocumentsPage() {
                     </td>
                     <td style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        {!isAudio && <Btn onClick={() => handlePreview(doc.id)} title="Prévisualiser" hBg="#EFF6FF" hCol="#3B82F6"><Eye size={14} /></Btn>}
+                        {!isAudio && <Btn onClick={() => handlePreview(doc)} title="Prévisualiser" hBg="#EFF6FF" hCol="#3B82F6"><Eye size={14} /></Btn>}
                         {!isAudio && !doc.invoice_id && <Btn onClick={() => handleCreate(doc)} title="Créer facture" hBg="#FFF7ED" hCol="#EA580C" disabled={creatingInv === doc.id}>{creatingInv === doc.id ? <Loader2 size={14} className="animate-spin" /> : <ClipboardList size={14} />}</Btn>}
                         <Btn onClick={() => handleDownload(doc.id)} title="Télécharger" hBg="#F0FDF4" hCol="#16A34A"><Download size={14} /></Btn>
                       </div>

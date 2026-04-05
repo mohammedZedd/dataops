@@ -370,6 +370,21 @@ def list_all_documents(
     return [document_service._to_read(d) for d in docs]
 
 
+@router.patch("/documents/{document_id}/viewed")
+def mark_document_viewed(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role == UserRole.CLIENT:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
+    doc = document_service.get_document(db, document_id)
+    if doc:
+        doc.is_new = False
+        db.commit()
+    return {"status": "ok"}
+
+
 @router.get("/documents/my", response_model=list[DocumentRead])
 def list_my_documents(
     db: Session = Depends(get_db),

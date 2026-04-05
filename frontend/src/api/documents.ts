@@ -9,6 +9,7 @@ export interface AdminClientDoc {
   status: string;
   doc_type: string | null;
   description: string | null;
+  is_new: boolean;
   client_id: string | null;
   client_name: string | null;
   invoice_id: string | null;
@@ -93,6 +94,10 @@ export async function uploadDocument(
     },
   });
   return data;
+}
+
+export async function markDocumentViewed(documentId: string): Promise<void> {
+  await apiClient.patch(`/documents/${documentId}/viewed`);
 }
 
 export async function createInvoiceFromDocument(documentId: string): Promise<Invoice> {

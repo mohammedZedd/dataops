@@ -19,6 +19,7 @@ def _to_read(doc: Document) -> DocumentRead:
         status=doc.status,
         doc_type=doc.doc_type,
         description=doc.description,
+        is_new=doc.is_new if hasattr(doc, 'is_new') else True,
         client_name=doc.client.name if doc.client else None,
         invoice_id=doc.invoice.id if doc.invoice else None,
         invoice_status=doc.invoice.status if doc.invoice else None,
