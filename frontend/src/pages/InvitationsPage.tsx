@@ -351,7 +351,7 @@ export default function InvitationsPage() {
                     </td>
                     <td style={{ padding: '14px 16px' }}><RoleBadge role={inv.role} /></td>
                     <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>
-                      {inv.client_name ? <span style={{ background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}>{inv.client_name}</span> : <span style={{ color: '#D1D5DB' }}>—</span>}
+                      {inv.client_name ? <span style={{ background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: 6, padding: '2px 8px', fontSize: 12, whiteSpace: 'nowrap', display: 'inline-block' }}>{inv.client_name}</span> : <span style={{ color: '#D1D5DB' }}>—</span>}
                     </td>
                     <td style={{ padding: '14px 16px' }}><StatusBadge inv={inv} /></td>
                     <td style={{ padding: '14px 16px', fontSize: 13, color: expSoon ? '#EF4444' : '#6B7280', whiteSpace: 'nowrap' }}>
