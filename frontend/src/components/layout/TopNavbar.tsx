@@ -79,13 +79,21 @@ export function TopNavbar() {
       const { data } = await apiClient.get('/notifications');
       setNotifs(data.notifications ?? []);
       const newUnread = data.unread_count ?? 0;
-      if (newUnread > prevUnread.current && prevUnread.current >= 0) soundService.playNotification();
+      if (prevUnread.current === -1) {
+        // First load: queue sound for first click if there are unread
+        if (newUnread > 0) {
+          const play = () => { soundService.playNotification(); document.removeEventListener('click', play); };
+          document.addEventListener('click', play);
+        }
+      } else if (newUnread > prevUnread.current) {
+        soundService.playNotification();
+      }
       prevUnread.current = newUnread;
       setUnread(newUnread);
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { fetchNotifs(); const t = setInterval(fetchNotifs, 30000); return () => clearInterval(t); }, [fetchNotifs]);
+  useEffect(() => { fetchNotifs(); const t = setInterval(fetchNotifs, 15000); return () => clearInterval(t); }, [fetchNotifs]);
 
   useEffect(() => {
     function h(e: MouseEvent) { if (bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false); }
