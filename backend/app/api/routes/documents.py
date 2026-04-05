@@ -3,7 +3,7 @@ import re
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from fastapi import status as http_status
@@ -60,14 +60,20 @@ def _check_ownership(doc: Document, current_user: User) -> None:
 
 # ─── Upload ───────────────────────────────────────────────────────────────────
 
+_AUDIO_TYPES = {
+    "audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav",
+}
+
+
 @router.post("/documents/upload", response_model=DocumentRead, status_code=201)
 async def upload_document(
     file: UploadFile = File(...),
+    description: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if file.content_type not in _ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail="Type non autorisé. PDF, JPG, PNG, XLSX acceptés.")
+        raise HTTPException(status_code=400, detail="Type non autorisé. PDF, JPG, PNG, XLSX, ou audio acceptés.")
 
     content = await file.read()
     if len(content) > _MAX_SIZE:
@@ -94,12 +100,15 @@ async def upload_document(
         current_user.client_id = new_client.id
         client_id = new_client.id
 
+    is_audio = file.content_type in _AUDIO_TYPES
     doc = Document(
         client_id=client_id,
         uploaded_by_user_id=current_user.id,
         file_name=original_name,
         s3_key=s3_key,
         file_size=len(content),
+        doc_type="audio" if is_audio else None,
+        description=description.strip() or None,
     )
     db.add(doc)
     db.commit()
@@ -266,6 +275,9 @@ def create_invoice_from_document(
         if not client or client.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="Accès refusé.")
 
+    if doc.doc_type == "audio":
+        raise HTTPException(status_code=400, detail="Impossible de créer une facture depuis une note vocale.")
+
     # Return existing invoice if one exists
     if doc.invoice:
         return invoice_service._to_read(doc.invoice)
@@ -311,6 +323,9 @@ def extract_document_data(
     doc = document_service.get_document(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document introuvable.")
+
+    if doc.doc_type == "audio":
+        raise HTTPException(status_code=400, detail="L'extraction n'est pas disponible pour les notes vocales.")
 
     if doc.client_id:
         client = client_service.get_client(db, doc.client_id)

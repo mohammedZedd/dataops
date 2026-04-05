@@ -23,6 +23,8 @@ class Document(Base):
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
     s3_key: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_size: Mapped[Optional[int]] = mapped_column(nullable=True)
+    doc_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

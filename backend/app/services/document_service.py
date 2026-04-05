@@ -17,6 +17,8 @@ def _to_read(doc: Document) -> DocumentRead:
         file_size=doc.file_size,
         uploaded_at=doc.uploaded_at,
         status=doc.status,
+        doc_type=doc.doc_type,
+        description=doc.description,
         invoice_id=doc.invoice.id if doc.invoice else None,
         invoice_status=doc.invoice.status if doc.invoice else None,
     )

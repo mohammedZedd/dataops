@@ -100,6 +100,7 @@ export default function ClientDocumentsPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceDescription, setVoiceDescription] = useState('');
   const [audioPlaying, setAudioPlaying] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -174,12 +175,14 @@ export default function ClientDocumentsPage() {
     setProgress(0);
     setUploadError(null);
     try {
-      const doc = await uploadDocument(file, setProgress);
+      const desc = audioFile ? voiceDescription.trim() : undefined;
+      const doc = await uploadDocument(file, setProgress, desc);
       setDocuments(prev => [doc, ...prev]);
       setSelected(null);
       setAudioFile(null);
       setAudioUrl(null);
       setPhotoPreview(null);
+      setVoiceDescription('');
       setProgress(0);
       showToast('success');
     } catch {
@@ -502,6 +505,12 @@ export default function ClientDocumentsPage() {
                   </div>
                   <audio ref={audioRef} src={audioUrl} onEnded={() => setAudioPlaying(false)} />
                 </div>
+                <input
+                  value={voiceDescription}
+                  onChange={e => setVoiceDescription(e.target.value)}
+                  placeholder="Ajouter une description (optionnel)"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-violet-400 mt-1"
+                />
                 <button onClick={discardRecording} className="text-xs text-gray-400 hover:text-red-500 underline">Supprimer et réenregistrer</button>
               </div>
             ) : isRecording ? (

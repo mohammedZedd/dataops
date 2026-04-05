@@ -498,11 +498,21 @@ export default function ClientDetailPage() {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 14, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</p>
-                        <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{formatBytes(doc.file_size)}</p>
+                        <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
+                          {doc.doc_type === 'audio' && doc.description
+                            ? doc.description
+                            : doc.doc_type === 'audio'
+                            ? 'Note vocale'
+                            : formatBytes(doc.file_size)}
+                        </p>
                       </div>
 
-                      {/* Invoice status badge */}
-                      {doc.invoice_id && doc.invoice_status ? (
+                      {/* Audio badge OR Invoice status badge */}
+                      {doc.doc_type === 'audio' ? (
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12, background: '#F5F3FF', color: '#7C3AED', border: '1px solid #DDD6FE' }}>
+                          Audio
+                        </span>
+                      ) : doc.invoice_id && doc.invoice_status ? (
                         <button
                           onClick={() => handleViewInvoice(doc.invoice_id!)}
                           style={{
@@ -522,8 +532,8 @@ export default function ClientDetailPage() {
                         {new Date(doc.uploaded_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                       </span>
 
-                      {/* Create invoice */}
-                      {!doc.invoice_id && (
+                      {/* Create invoice — hidden for audio */}
+                      {!doc.invoice_id && doc.doc_type !== 'audio' && (
                         <button onClick={() => handleCreateInvoice(doc.id)} disabled={creatingInv === doc.id}
                           title="Créer une facture" style={{
                             height: 32, width: 32, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer',

@@ -7,6 +7,8 @@ export interface AdminClientDoc {
   file_size: number | null;
   uploaded_at: string;
   status: string;
+  doc_type: string | null;
+  description: string | null;
   invoice_id: string | null;
   invoice_status: string | null;
 }
@@ -38,9 +40,11 @@ export async function getPresignedPreviewUrl(id: string): Promise<string> {
 export async function uploadDocument(
   file: File,
   onProgress?: (pct: number) => void,
+  description?: string,
 ): Promise<ClientDocument> {
   const form = new FormData();
   form.append('file', file);
+  if (description) form.append('description', description);
 
   const { data } = await apiClient.post<ClientDocument>('/documents/upload', form, {
     headers: { 'Content-Type': 'multipart/form-data' },

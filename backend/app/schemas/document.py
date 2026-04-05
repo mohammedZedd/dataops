@@ -23,6 +23,8 @@ class DocumentRead(BaseModel):
     file_size: Optional[int] = None
     uploaded_at: datetime
     status: DocumentStatus
+    doc_type: Optional[str] = None
+    description: Optional[str] = None
     invoice_id: Optional[str] = None
     invoice_status: Optional[str] = None
 
