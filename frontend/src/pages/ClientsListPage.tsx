@@ -1313,7 +1313,7 @@ export default function ClientsListPage() {
                       <td style={{ padding: '16px 12px' }} onClick={e => e.stopPropagation()}>
                         {c.client_id ? (
                           <button
-                            onClick={() => setDocsTarget(c)}
+                            onClick={() => navigate(`/clients/${c.client_id}?tab=documents`)}
                             style={{
                               fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
                               border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
