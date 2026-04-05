@@ -11,6 +11,7 @@ import { getClientDocuments, getPresignedDownloadUrl, getPresignedPreviewUrl, cr
 import type { AdminClientDoc } from '../api/documents';
 import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
 import type { Client, ClientUser } from '../types';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -299,26 +300,17 @@ export default function ClientDetailPage() {
             </GridCell>
             <GridCell icon={<Briefcase size={16} />} iconBg="#F0FDF4" iconColor="#0D9488" label="Secteur d'activité">
               {editMode ? (
-                <select value={editSecteur} onChange={e => setEditSecteur(e.target.value)} style={{ ...INPUT_STYLE, color: editSecteur ? '#111827' : '#9CA3AF' }}>
-                  <option value="">— Non renseigné —</option>
-                  {SECTEURS_ACTIVITE.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <SearchableSelect options={SECTEURS_ACTIVITE} value={editSecteur} onChange={setEditSecteur} placeholder="Rechercher un secteur…" />
               ) : <p style={{ fontSize: 15, fontWeight: 500, color: client.secteur_activite ? '#111827' : '#9CA3AF', marginTop: 4 }}>{client.secteur_activite ?? '—'}</p>}
             </GridCell>
             <GridCell icon={<FileText size={16} />} iconBg="#EFF6FF" iconColor="#3B82F6" label="Régime fiscal">
               {editMode ? (
-                <select value={editRegime} onChange={e => setEditRegime(e.target.value)} style={{ ...INPUT_STYLE, color: editRegime ? '#111827' : '#9CA3AF' }}>
-                  <option value="">— Non renseigné —</option>
-                  {REGIMES_FISCAUX.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+                <SearchableSelect options={REGIMES_FISCAUX} value={editRegime} onChange={setEditRegime} placeholder="Rechercher un régime…" />
               ) : <p style={{ fontSize: 15, fontWeight: 500, color: client.regime_fiscal ? '#111827' : '#9CA3AF', marginTop: 4 }}>{client.regime_fiscal ?? '—'}</p>}
             </GridCell>
             <GridCell icon={<Building2 size={16} />} iconBg="#FFF7ED" iconColor="#D97706" label="Forme juridique">
               {editMode ? (
-                <select value={editForme} onChange={e => setEditForme(e.target.value)} style={{ ...INPUT_STYLE, color: editForme ? '#111827' : '#9CA3AF' }}>
-                  <option value="">— Non renseigné —</option>
-                  {FORMES_JURIDIQUES.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
+                <SearchableSelect options={FORMES_JURIDIQUES} value={editForme} onChange={setEditForme} placeholder="Rechercher une forme…" />
               ) : <p style={{ fontSize: 15, fontWeight: 500, color: client.forme_juridique ? '#111827' : '#9CA3AF', marginTop: 4 }}>{client.forme_juridique ?? '—'}</p>}
             </GridCell>
             <GridCell icon={<Calendar size={16} />} iconBg="#F9FAFB" iconColor="#6B7280" label="Inscription">

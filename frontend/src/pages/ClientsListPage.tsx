@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Users, X, CheckCircle, User, Mail, Phone, Building2, Calendar, Ban, Pencil, Lock, Eye, Trash2, Plus, ChevronsUpDown, Search, FolderOpen, FileText, ImageIcon, FileSpreadsheet, File, ChevronDown, ChevronUp, ChevronRight, Download, Briefcase, ClipboardList, Loader2, Mic, RotateCcw } from 'lucide-react';
 import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { getClientUsers, revokeClientAccess, restoreClientAccess, updateClientUser } from '../api/clients';
 import { getClientDocuments, getPresignedDownloadUrl, createInvoiceFromDocument } from '../api/documents';
 import type { AdminClientDoc } from '../api/documents';
@@ -366,16 +367,7 @@ function DetailDrawer({ client, onClose, onRevoked, onUpdated, initialEditMode }
                 Secteur d'activité
               </p>
               {editMode ? (
-                <select
-                  value={editSecteur}
-                  onChange={(e) => setEditSecteur((e.target as HTMLSelectElement).value)}
-                  style={{ ...INPUT_STYLE, color: editSecteur ? '#111827' : '#9CA3AF' }}
-                >
-                  <option value="">— Non renseigné —</option>
-                  {SECTEURS_ACTIVITE.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <SearchableSelect options={SECTEURS_ACTIVITE} value={editSecteur} onChange={setEditSecteur} placeholder="Rechercher un secteur…" />
               ) : (
                 <p style={{ fontSize: 14, fontWeight: 500, color: client.secteur_activite ? '#111827' : '#9CA3AF' }}>
                   {client.secteur_activite ?? '—'}
@@ -401,16 +393,7 @@ function DetailDrawer({ client, onClose, onRevoked, onUpdated, initialEditMode }
                 Régime fiscal
               </p>
               {editMode ? (
-                <select
-                  value={editRegime}
-                  onChange={(e) => setEditRegime((e.target as HTMLSelectElement).value)}
-                  style={{ ...INPUT_STYLE, color: editRegime ? '#111827' : '#9CA3AF' }}
-                >
-                  <option value="">— Non renseigné —</option>
-                  {REGIMES_FISCAUX.map(r => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
+                <SearchableSelect options={REGIMES_FISCAUX} value={editRegime} onChange={setEditRegime} placeholder="Rechercher un régime…" />
               ) : (
                 <p style={{ fontSize: 14, fontWeight: 500, color: client.regime_fiscal ? '#111827' : '#9CA3AF' }}>
                   {client.regime_fiscal ?? '—'}
@@ -436,16 +419,7 @@ function DetailDrawer({ client, onClose, onRevoked, onUpdated, initialEditMode }
                 Forme juridique
               </p>
               {editMode ? (
-                <select
-                  value={editForme}
-                  onChange={(e) => setEditForme((e.target as HTMLSelectElement).value)}
-                  style={{ ...INPUT_STYLE, color: editForme ? '#111827' : '#9CA3AF' }}
-                >
-                  <option value="">— Non renseigné —</option>
-                  {FORMES_JURIDIQUES.map(f => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+                <SearchableSelect options={FORMES_JURIDIQUES} value={editForme} onChange={setEditForme} placeholder="Rechercher une forme…" />
               ) : (
                 <p style={{ fontSize: 14, fontWeight: 500, color: client.forme_juridique ? '#111827' : '#9CA3AF' }}>
                   {client.forme_juridique ?? '—'}

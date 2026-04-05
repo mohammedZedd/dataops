@@ -5,6 +5,7 @@ import { Lock, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import { acceptInvitation, getInvitationByToken } from '../api/invitations';
 import { useAuth } from '../context/AuthContext';
 import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import type { InvitationPublic } from '../types';
 
 const INPUT =
@@ -304,27 +305,19 @@ export default function AcceptInvitePage() {
 
                 <div>
                   <label className={LABEL}>Secteur d'activité <span className="text-red-400">*</span></label>
-                  <select value={secteur} onChange={e => setSecteur(e.target.value)} className={SELECT} style={{ color: secteur ? '#111827' : '#9CA3AF' }}>
-                    <option value="">— Sélectionner —</option>
-                    {SECTEURS_ACTIVITE.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <SearchableSelect options={SECTEURS_ACTIVITE} value={secteur} onChange={setSecteur} placeholder="Rechercher un secteur…" />
                   <FieldError msg={fieldErrors.secteur} />
                 </div>
 
                 <div>
                   <label className={LABEL}>Forme juridique <span className="text-red-400">*</span></label>
-                  <select value={forme} onChange={e => setForme(e.target.value)} className={SELECT} style={{ color: forme ? '#111827' : '#9CA3AF' }}>
-                    <option value="">— Sélectionner —</option>
-                    {FORMES_JURIDIQUES.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
+                  <SearchableSelect options={FORMES_JURIDIQUES} value={forme} onChange={setForme} placeholder="Rechercher une forme…" />
                   <FieldError msg={fieldErrors.forme} />
                 </div>
 
                 <div>
                   <label className={LABEL}>Régime fiscal <span className="text-red-400">*</span></label>
-                  <select value={regime} onChange={e => setRegime(e.target.value)} className={SELECT} style={{ color: regime ? '#111827' : '#9CA3AF' }}>
-                    <option value="">— Sélectionner —</option>
-                    {REGIMES_FISCAUX.map(r => <option key={r} value={r}>{r}</option>)}
+                  <SearchableSelect options={REGIMES_FISCAUX} value={regime} onChange={setRegime} placeholder="Rechercher un régime…" />
                   </select>
                   <FieldError msg={fieldErrors.regime} />
                 </div>
