@@ -97,6 +97,9 @@ export default function ClientDetailPage() {
   const [playingId,   setPlayingId]   = useState<string | null>(null);
   const [playingUrl,  setPlayingUrl]  = useState<string | null>(null);
 
+  // Document filter
+  const [docFilter, setDocFilter] = useState<'all' | 'client' | 'cabinet'>('all');
+
   // Revoke
   const [revoking, setRevoking] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -454,7 +457,26 @@ export default function ClientDetailPage() {
 
           {error && <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 13, color: '#DC2626', marginBottom: 16 }}>{error}</div>}
 
-          {docs.length === 0 ? (
+          {/* Filter tabs */}
+          {docs.length > 0 && (() => {
+            const clientCount = docs.filter(d => d.source !== 'cabinet').length;
+            const cabinetCount = docs.filter(d => d.source === 'cabinet').length;
+            return (
+              <div style={{ display: 'flex', gap: 0, background: '#F3F4F6', borderRadius: 10, padding: 4, width: 'fit-content', marginBottom: 20 }}>
+                {[{ key: 'all' as const, label: 'Tous', count: docs.length }, { key: 'client' as const, label: '📤 Du client', count: clientCount }, { key: 'cabinet' as const, label: '📥 Du cabinet', count: cabinetCount }].map(tab => (
+                  <button key={tab.key} onClick={() => setDocFilter(tab.key)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: docFilter === tab.key ? 600 : 400, background: docFilter === tab.key ? '#fff' : 'transparent', color: docFilter === tab.key ? '#111827' : '#6B7280', boxShadow: docFilter === tab.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {tab.label}
+                    {tab.count > 0 && <span style={{ background: docFilter === tab.key ? (tab.key === 'cabinet' ? '#EDE9FE' : '#EFF6FF') : '#E5E7EB', color: docFilter === tab.key ? (tab.key === 'cabinet' ? '#7C3AED' : '#3B82F6') : '#9CA3AF', borderRadius: 10, padding: '0 6px', fontSize: 11, fontWeight: 600 }}>{tab.count}</span>}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+
+          {(() => {
+            const filteredDocs = docFilter === 'client' ? docs.filter(d => d.source !== 'cabinet') : docFilter === 'cabinet' ? docs.filter(d => d.source === 'cabinet') : docs;
+            const filteredGroups = groupByMonth(filteredDocs);
+            return filteredDocs.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 24px' }}>
               <div style={{ height: 56, width: 56, borderRadius: '50%', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
                 <FolderOpen size={26} color="#9CA3AF" />
@@ -464,7 +486,7 @@ export default function ClientDetailPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {groups.map(({ key, label, docs: groupDocs }) => (
+              {filteredGroups.map(({ key, label, docs: groupDocs }) => (
                 <div key={key} style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #E5E7EB', background: '#fff' }}>
                   <button onClick={() => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; })}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px', background: '#fff', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
@@ -477,10 +499,11 @@ export default function ClientDetailPage() {
                   </button>
                   {expanded.has(key) && groupDocs.map(doc => {
                     const docIsNew = doc.is_new;
-                    const rowBg = docIsNew ? '#F0F9FF' : '#fff';
+                    const isCabinet = doc.source === 'cabinet';
+                    const rowBg = docIsNew ? '#F0F9FF' : isCabinet ? '#FAF5FF' : '#fff';
                     return (
                     <div key={doc.id} id={`doc-${doc.id}`}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px 12px 40px', borderTop: '1px solid #F3F4F6', background: rowBg, borderLeft: docIsNew ? '3px solid #3B82F6' : '3px solid transparent', transition: 'background 0.1s' }}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px 12px 40px', borderTop: '1px solid #F3F4F6', background: rowBg, borderLeft: docIsNew ? '3px solid #3B82F6' : isCabinet ? '3px solid #DDD6FE' : '3px solid transparent', transition: 'background 0.1s' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F8FAFC'; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = rowBg; }}>
                         <div style={{ height: 36, width: 36, borderRadius: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -493,6 +516,7 @@ export default function ClientDetailPage() {
                           </p>
                           <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
                             {isAudioDoc(doc) ? (doc.description || 'Note vocale') : formatBytes(doc.file_size)}
+                            {doc.source === 'cabinet' && <span style={{ marginLeft: 6, color: '#7C3AED', fontWeight: 500 }}>· 📥 Cabinet</span>}
                           </p>
                         </div>
                         {/* Badge */}
@@ -554,7 +578,8 @@ export default function ClientDetailPage() {
                 </div>
               ))}
             </div>
-          )}
+          );
+          })()}
         </div>
       )}
 
