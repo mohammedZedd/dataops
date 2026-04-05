@@ -22,7 +22,10 @@ export default function ClientMessagesPage() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const prevCount = useRef(0);
+  const isAtBottom = useRef(true);
+  const [hasNew, setHasNew] = useState(false);
 
   const init = useCallback(async () => {
     setLoading(true);
@@ -45,18 +48,41 @@ export default function ClientMessagesPage() {
     try {
       const { data } = await apiClient.get(`/chat/conversations/${convId}/messages`);
       const list: Msg[] = data.messages ?? [];
-      if (list.length > prevCount.current && prevCount.current > 0) {
-        const last = list[list.length - 1];
-        if (last && last.sender_id !== user?.id) soundService.playMessageReceived();
-      }
-      prevCount.current = list.length;
-      setMsgs(list);
+      // Only update if messages actually changed
+      setMsgs(prev => {
+        const prevIds = prev.map(m => m.id).join(',');
+        const newIds = list.map((m: Msg) => m.id).join(',');
+        if (prevIds === newIds) return prev;
+        // New message detected
+        if (list.length > prevCount.current && prevCount.current > 0) {
+          const last = list[list.length - 1];
+          const isMine = last && last.sender_id === user?.id;
+          if (!isMine) soundService.playMessageReceived();
+          if (!isMine && !isAtBottom.current) setHasNew(true);
+        }
+        prevCount.current = list.length;
+        return list;
+      });
     } catch { /* */ }
   }, [convId, user?.id]);
 
   useEffect(() => { init(); }, [init]);
   useEffect(() => { if (convId) { const t = setInterval(fetchMsgs, 4000); return () => clearInterval(t); } }, [convId, fetchMsgs]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
+
+  // Smart scroll: only on new messages + at bottom
+  useEffect(() => {
+    if (msgs.length === 0) return;
+    const last = msgs[msgs.length - 1];
+    const isMine = last?.sender_id === user?.id;
+    if (isMine || isAtBottom.current) endRef.current?.scrollIntoView({ behavior: prevCount.current <= 1 ? 'instant' : 'smooth' });
+  }, [msgs.length]);
+
+  function handleScroll() {
+    const el = containerRef.current;
+    if (!el) return;
+    isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    if (isAtBottom.current) setHasNew(false);
+  }
 
   async function handleSend() {
     if (!text.trim() || sending) return;
@@ -90,7 +116,15 @@ export default function ClientMessagesPage() {
       </div>
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 720, width: '100%', margin: '0 auto' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {/* New message indicator */}
+        {hasNew && (
+          <div onClick={() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); setHasNew(false); }}
+            style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#2563EB,#7C3AED)', color: '#fff', borderRadius: 20, padding: '8px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 12px rgba(37,99,235,0.3)', zIndex: 10, whiteSpace: 'nowrap' }}>
+            ↓ Nouveau message
+          </div>
+        )}
+      <div ref={containerRef} onScroll={handleScroll} style={{ height: '100%', overflowY: 'auto', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 720, width: '100%', margin: '0 auto' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF' }}>Chargement…</div>
         ) : msgs.length === 0 ? (
@@ -130,6 +164,7 @@ export default function ClientMessagesPage() {
             <div ref={endRef} />
           </>
         )}
+      </div>
       </div>
 
       {/* Input */}
