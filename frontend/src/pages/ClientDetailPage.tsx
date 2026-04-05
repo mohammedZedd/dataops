@@ -7,7 +7,7 @@ import {
   Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X,
 } from 'lucide-react';
 import { getClient, getClientUsers, updateClientUser, revokeClientAccess, restoreClientAccess } from '../api/clients';
-import { getClientDocuments, getPresignedDownloadUrl, getPresignedPreviewUrl, createInvoiceFromDocument, uploadDocument } from '../api/documents';
+import { getClientDocuments, getPresignedDownloadUrl, getPresignedPreviewUrl, createInvoiceFromDocument, uploadDocument, markDocumentViewed } from '../api/documents';
 import type { AdminClientDoc } from '../api/documents';
 import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
 import type { Client, ClientUser } from '../types';
@@ -71,6 +71,7 @@ export default function ClientDetailPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'details';
+  const highlightDocId = searchParams.get('highlight');
 
   const [client,      setClient]      = useState<Client | null>(null);
   const [clientUser,  setClientUser]  = useState<ClientUser | null>(null);
@@ -126,6 +127,15 @@ export default function ClientDetailPage() {
 
   function switchTab(tab: string) { setSearchParams({ tab }); }
 
+  // Scroll to highlighted document from notification
+  useEffect(() => {
+    if (!highlightDocId || docs.length === 0) return;
+    setTimeout(() => {
+      const el = document.getElementById(`doc-${highlightDocId}`);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.transition = 'background 0.5s'; el.style.background = '#DBEAFE'; setTimeout(() => { el.style.background = '#F0F9FF'; }, 1500); }
+    }, 500);
+  }, [highlightDocId, docs]);
+
   // ─── Edit handlers ─────────────────────────────────────────────────────────
 
   function enterEdit() {
@@ -168,8 +178,9 @@ export default function ClientDetailPage() {
 
   // ─── Document handlers ─────────────────────────────────────────────────────
 
-  async function handlePreview(docId: string) {
-    try { const url = await getPresignedPreviewUrl(docId); window.open(url, '_blank'); } catch { /* */ }
+  async function handlePreview(doc: AdminClientDoc) {
+    if (doc.is_new) { markDocumentViewed(doc.id).catch(() => {}); setDocs(p => p.map(d => d.id === doc.id ? { ...d, is_new: false } : d)); }
+    try { const url = await getPresignedPreviewUrl(doc.id); window.open(url, '_blank'); } catch { /* */ }
   }
 
   async function handleDownload(docId: string) {
@@ -462,16 +473,22 @@ export default function ClientDetailPage() {
                     </span>
                     {expanded.has(key) ? <ChevronUp size={15} color="#6B7280" /> : <ChevronDown size={15} color="#6B7280" />}
                   </button>
-                  {expanded.has(key) && groupDocs.map(doc => (
-                    <div key={doc.id}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px 12px 40px', borderTop: '1px solid #F3F4F6', background: '#fff', transition: 'background 0.1s' }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F9FAFB'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = '#fff'; }}>
+                  {expanded.has(key) && groupDocs.map(doc => {
+                    const docIsNew = doc.is_new;
+                    const rowBg = docIsNew ? '#F0F9FF' : '#fff';
+                    return (
+                    <div key={doc.id} id={`doc-${doc.id}`}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px 12px 40px', borderTop: '1px solid #F3F4F6', background: rowBg, borderLeft: docIsNew ? '3px solid #3B82F6' : '3px solid transparent', transition: 'background 0.1s' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F8FAFC'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = rowBg; }}>
                         <div style={{ height: 36, width: 36, borderRadius: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {fileIcon(doc.file_name)}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 14, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</p>
+                          <p style={{ fontSize: 14, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {doc.file_name}
+                            {docIsNew && <span style={{ background: '#3B82F6', color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 10, fontWeight: 700, letterSpacing: '0.3px', textTransform: 'uppercase', flexShrink: 0 }}>Nouveau</span>}
+                          </p>
                           <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
                             {isAudioDoc(doc) ? (doc.description || 'Note vocale') : formatBytes(doc.file_size)}
                           </p>
@@ -503,7 +520,7 @@ export default function ClientDetailPage() {
                         ) : (
                           /* Non-audio: preview + invoice */
                           <>
-                            <IconBtn onClick={() => handlePreview(doc.id)} title="Prévisualiser">
+                            <IconBtn onClick={() => handlePreview(doc)} title="Prévisualiser">
                               <Eye size={15} />
                             </IconBtn>
                             {doc.invoice_id ? (
@@ -530,7 +547,8 @@ export default function ClientDetailPage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               ))}
             </div>
