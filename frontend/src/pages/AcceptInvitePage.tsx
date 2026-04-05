@@ -318,7 +318,6 @@ export default function AcceptInvitePage() {
                 <div>
                   <label className={LABEL}>Régime fiscal <span className="text-red-400">*</span></label>
                   <SearchableSelect options={REGIMES_FISCAUX} value={regime} onChange={setRegime} placeholder="Rechercher un régime…" />
-                  </select>
                   <FieldError msg={fieldErrors.regime} />
                 </div>
 
