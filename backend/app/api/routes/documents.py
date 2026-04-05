@@ -128,6 +128,20 @@ async def upload_document(
     db.add(doc)
     db.commit()
     db.refresh(doc)
+
+    # Notify admins/accountants about new upload
+    if target_client_id and current_user.role == UserRole.CLIENT:
+        from app.services import notification_service
+        client_obj = client_service.get_client(db, target_client_id)
+        notification_service.notify_staff(
+            db, company_id=current_user.company_id, type="document_uploaded",
+            title="Nouveau document reçu",
+            message=f"{current_user.first_name} {current_user.last_name} a envoyé : {original_name}",
+            link=f"/clients/{target_client_id}?tab=documents",
+            client_id=target_client_id, document_id=doc.id,
+        )
+        db.commit()
+
     return document_service._to_read(doc)
 
 
