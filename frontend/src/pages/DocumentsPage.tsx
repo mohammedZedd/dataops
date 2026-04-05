@@ -77,6 +77,7 @@ export default function DocumentsPage() {
   const navigate = useNavigate();
   const [urlParams] = useSearchParams();
   const searchRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // Read initial filters from URL params (from dashboard navigation)
   const initStatus = (urlParams.get('status') as Statut) || 'Tous';
@@ -201,10 +202,10 @@ export default function DocumentsPage() {
       {/* KPI Cards */}
       {stats && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-          <Kpi icon="📄" bg="#EFF6FF" val={stats.total_this_month} col="#3B82F6" label="Documents ce mois" />
-          <Kpi icon="⏳" bg="#FFF7ED" val={stats.pending} col="#EA580C" label="En attente" sub={stats.urgent > 0 ? `${stats.urgent} urgents` : undefined} subCol="#DC2626" />
-          <Kpi icon="✅" bg="#F0FDF4" val={stats.validated} col="#16A34A" label="Factures validées" />
-          <Kpi icon="❌" bg="#FEF2F2" val={stats.rejected} col="#DC2626" label="Rejetés / erreurs" />
+          <Kpi icon="📄" bg="#EFF6FF" val={stats.total_this_month} col="#3B82F6" label="Documents ce mois" active={statusFilter === 'Tous' && periodFilter === 'this_month'} accentCol="#3B82F6" onClick={() => { setStatusFilter('Tous'); setPeriodFilter('this_month'); setPage(1); tableRef.current?.scrollIntoView({ behavior: 'smooth' }); }} />
+          <Kpi icon="⏳" bg="#FFF7ED" val={stats.pending} col="#EA580C" label="En attente" sub={stats.urgent > 0 ? `${stats.urgent} urgents` : undefined} subCol="#DC2626" active={statusFilter === 'En attente'} accentCol="#F59E0B" onClick={() => { setStatusFilter('En attente'); setPeriodFilter('all'); setPage(1); tableRef.current?.scrollIntoView({ behavior: 'smooth' }); }} />
+          <Kpi icon="✅" bg="#F0FDF4" val={stats.validated} col="#16A34A" label="Factures validées" active={statusFilter === 'Validé'} accentCol="#16A34A" onClick={() => { setStatusFilter('Validé'); setPeriodFilter('all'); setPage(1); tableRef.current?.scrollIntoView({ behavior: 'smooth' }); }} />
+          <Kpi icon="❌" bg="#FEF2F2" val={stats.rejected} col="#DC2626" label="Rejetés / erreurs" active={statusFilter === 'Rejeté'} accentCol="#DC2626" onClick={() => { setStatusFilter('Rejeté'); setPeriodFilter('all'); setPage(1); tableRef.current?.scrollIntoView({ behavior: 'smooth' }); }} />
         </div>
       )}
 
@@ -323,6 +324,7 @@ export default function DocumentsPage() {
       </div>
 
       {/* Table */}
+      <div ref={tableRef} />
       {paged.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <FolderOpen size={40} color="#D1D5DB" style={{ margin: '0 auto 12px' }} />
@@ -421,9 +423,12 @@ export default function DocumentsPage() {
 
 // ─── Tiny components ─────────────────────────────────────────────────────────
 
-function Kpi({ icon, bg, val, col, label, sub, subCol }: { icon: string; bg: string; val: number; col: string; label: string; sub?: string; subCol?: string }) {
+function Kpi({ icon, bg, val, col, label, sub, subCol, onClick, active, accentCol }: { icon: string; bg: string; val: number; col: string; label: string; sub?: string; subCol?: string; onClick?: () => void; active?: boolean; accentCol?: string }) {
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+    <div onClick={onClick} style={{ background: '#fff', border: active ? `2px solid ${accentCol ?? col}` : '1px solid #E5E7EB', borderRadius: 12, padding: '20px 24px', boxShadow: active ? `0 4px 16px ${accentCol ?? col}25` : '0 1px 3px rgba(0,0,0,0.05)', cursor: onClick ? 'pointer' : 'default', transition: 'all 0.2s', position: 'relative' }}
+      onMouseEnter={e => { if (onClick) { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-3px)'; } }}
+      onMouseLeave={e => { if (onClick) { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; } }}>
+      {active && <div style={{ position: 'absolute', top: 10, right: 10, width: 8, height: 8, borderRadius: '50%', background: accentCol ?? col }} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{icon}</div>
         <span style={{ fontSize: 28, fontWeight: 700, color: col }}>{val}</span>
