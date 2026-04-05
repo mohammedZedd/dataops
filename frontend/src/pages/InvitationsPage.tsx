@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Mail, Users, UserPlus, Filter, CheckCircle } from 'lucide-react';
+import { Mail, Users, UserPlus, Filter, CheckCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { getInvitations, resendInvitation, revokeInvitation } from '../api/invitations';
 import { getClients } from '../api/clients';
 import { useAuth } from '../context/AuthContext';
@@ -292,7 +292,7 @@ export default function InvitationsPage() {
       </div>
 
       {/* Invitations table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
 
         {listError && <ErrorBanner message={listError} />}
 
@@ -320,165 +320,63 @@ export default function InvitationsPage() {
             <p className="text-sm text-gray-400 mt-1">Essayez de modifier ou réinitialiser les filtres.</p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-
-              {/* Header labels row */}
-              <tr>
-                <th className={thClass('email', !!filters.email)} onClick={() => openCol('email')}>
-                  <span className="flex items-center gap-1.5">
-                    Email
-                    <Filter size={11} className={filters.email ? 'text-blue-500' : 'text-gray-300'} />
-                  </span>
-                </th>
-                <th className={thClass('name', !!filters.name)} onClick={() => openCol('name')}>
-                  <span className="flex items-center gap-1.5">
-                    Nom
-                    <Filter size={11} className={filters.name ? 'text-blue-500' : 'text-gray-300'} />
-                  </span>
-                </th>
-                <th className={thClass('role', !!filters.role)} onClick={() => openCol('role')}>
-                  <span className="flex items-center gap-1.5">
-                    Rôle
-                    <Filter size={11} className={filters.role ? 'text-blue-500' : 'text-gray-300'} />
-                  </span>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                  Client lié
-                </th>
-                <th className={thClass('status', !!filters.status)} onClick={() => openCol('status')}>
-                  <span className="flex items-center gap-1.5">
-                    Statut
-                    <Filter size={11} className={filters.status ? 'text-blue-500' : 'text-gray-300'} />
-                  </span>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                  Expiration
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap w-[180px]">
-                  Actions
-                </th>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#1E2A4A' }}>
+                {['EMAIL', 'NOM', 'RÔLE', 'CLIENT LIÉ', 'STATUT', 'EXPIRATION', 'ACTIONS'].map(h => (
+                  <th key={h} style={{ padding: '12px 16px', color: '#fff', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
               </tr>
-
-              {/* Inline filter row — only rendered when a col is active */}
-              {activeCol && (
-                <tr className="border-t border-blue-100 bg-blue-50/40">
-                  {/* email */}
-                  <td className="px-2 py-1.5">
-                    {activeCol === 'email' ? (
-                      <input
-                        ref={inputRef}
-                        type="text"
-                        value={inputDraft}
-                        onChange={(e) => setInputDraft(e.target.value)}
-                        onKeyDown={(e) => handleTextKeyDown(e, 'email')}
-                        onBlur={() => commitText('email')}
-                        placeholder="Filtrer… (Entrée)"
-                        className="w-full border border-blue-300 rounded px-2 py-1 text-xs focus:outline-none"
-                      />
-                    ) : null}
-                  </td>
-                  {/* name */}
-                  <td className="px-2 py-1.5">
-                    {activeCol === 'name' ? (
-                      <input
-                        ref={inputRef}
-                        type="text"
-                        value={inputDraft}
-                        onChange={(e) => setInputDraft(e.target.value)}
-                        onKeyDown={(e) => handleTextKeyDown(e, 'name')}
-                        onBlur={() => commitText('name')}
-                        placeholder="Filtrer… (Entrée)"
-                        className="w-full border border-blue-300 rounded px-2 py-1 text-xs focus:outline-none"
-                      />
-                    ) : null}
-                  </td>
-                  {/* role */}
-                  <td className="px-2 py-1.5">
-                    {activeCol === 'role' ? (
-                      <select
-                        autoFocus
-                        value={filters.role}
-                        onChange={(e) => handleSelectChange('role', e.target.value)}
-                        className="w-full border border-blue-300 rounded px-2 py-1 text-xs focus:outline-none bg-white"
-                      >
-                        <option value="">Tous les rôles</option>
-                        <option value="accountant">Comptable</option>
-                        <option value="client">Client</option>
-                      </select>
-                    ) : null}
-                  </td>
-                  {/* client lié — not filterable */}
-                  <td />
-                  {/* status */}
-                  <td className="px-2 py-1.5">
-                    {activeCol === 'status' ? (
-                      <select
-                        autoFocus
-                        value={filters.status}
-                        onChange={(e) => handleSelectChange('status', e.target.value)}
-                        className="w-full border border-blue-300 rounded px-2 py-1 text-xs focus:outline-none bg-white"
-                      >
-                        <option value="">Tous les statuts</option>
-                        <option value="pending">En attente</option>
-                        <option value="accepted">Acceptée</option>
-                        <option value="expired">Expirée</option>
-                      </select>
-                    ) : null}
-                  </td>
-                  <td /><td />
-                </tr>
-              )}
 
             </thead>
             <tbody>
-              {filtered.map((inv, idx) => {
+              {filtered.map((inv) => {
                 const expired   = inv.status === 'expired' || isExpired(inv);
+                const effective = expired ? 'expired' : inv.status;
                 const canResend = inv.status === 'pending' || expired;
                 const loading   = actioningId === inv.id;
-                const isLast    = idx === filtered.length - 1;
+                const accentColor = effective === 'pending' ? '#F59E0B' : effective === 'accepted' ? '#16A34A' : effective === 'cancelled' ? '#EF4444' : '#9CA3AF';
+                const initials = `${inv.first_name.charAt(0)}${inv.last_name.charAt(0)}`.toUpperCase();
+                const expSoon = new Date(inv.expires_at).getTime() - Date.now() > 0 && new Date(inv.expires_at).getTime() - Date.now() < 86400000;
                 return (
-                  <tr
-                    key={inv.id}
-                    className={`hover:bg-gray-50 transition-colors ${isLast ? '' : 'border-b border-gray-100'}`}
-                  >
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-0 w-full truncate" title={inv.email}>{inv.email}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                      {inv.first_name} {inv.last_name}
+                  <tr key={inv.id} style={{ borderBottom: '1px solid #F3F4F6', boxShadow: `inset 4px 0 0 0 ${accentColor}`, transition: 'background 0.1s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#F8FAFC'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#fff'; }}>
+                    <td style={{ padding: '14px 16px', fontSize: 14, fontWeight: 600, color: '#111827' }} title={inv.email}>{inv.email}</td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
+                        <span style={{ fontSize: 14, color: '#374151' }}>{inv.first_name} {inv.last_name}</span>
+                      </div>
                     </td>
-                    <td className="px-4 py-3"><RoleBadge role={inv.role} /></td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{inv.client_name ?? '—'}</td>
-                    <td className="px-4 py-3"><StatusBadge inv={inv} /></td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                    <td style={{ padding: '14px 16px' }}><RoleBadge role={inv.role} /></td>
+                    <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>
+                      {inv.client_name ? <span style={{ background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}>{inv.client_name}</span> : <span style={{ color: '#D1D5DB' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '14px 16px' }}><StatusBadge inv={inv} /></td>
+                    <td style={{ padding: '14px 16px', fontSize: 13, color: expSoon ? '#EF4444' : '#6B7280', whiteSpace: 'nowrap' }}>
                       {new Date(inv.expires_at).toLocaleDateString('fr-FR')}
+                      {expSoon && <span style={{ marginLeft: 4, fontSize: 10 }}>Bientôt</span>}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                    <td style={{ padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
                         {canResend && (
-                          <button
-                            onClick={() => handleResend(inv.id)}
-                            disabled={loading}
-                            className="px-3 py-1 text-xs font-medium text-gray-600 border border-gray-200
-                              rounded-lg hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50
-                              transition-colors disabled:opacity-50"
-                          >
-                            {loading ? '…' : 'Renvoyer'}
+                          <button onClick={() => handleResend(inv.id)} disabled={loading} title="Renvoyer"
+                            style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
+                            onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#EFF6FF'; b.style.borderColor = '#BFDBFE'; }}
+                            onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.borderColor = '#E5E7EB'; }}>
+                            <RefreshCw size={14} color="#3B82F6" />
                           </button>
                         )}
                         {inv.status === 'pending' && (
-                          <>
-                            {canResend && <span className="w-px h-4 bg-gray-200" />}
-                            <button
-                              onClick={() => setConfirmDeleteId(inv.id)}
-                              disabled={loading}
-                              className="px-3 py-1 text-xs font-medium text-red-500 border border-red-100
-                                rounded-lg hover:border-red-300 hover:text-red-700 hover:bg-red-50
-                                transition-colors disabled:opacity-50"
-                            >
-                              Supprimer
-                            </button>
-                          </>
+                          <button onClick={() => setConfirmDeleteId(inv.id)} disabled={loading} title="Supprimer"
+                            style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
+                            onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#FEF2F2'; b.style.borderColor = '#FECACA'; }}
+                            onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.borderColor = '#E5E7EB'; }}>
+                            <Trash2 size={14} color="#EF4444" />
+                          </button>
                         )}
+                        {effective === 'accepted' && <span style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic', lineHeight: '32px' }}>—</span>}
                       </div>
                     </td>
                   </tr>
