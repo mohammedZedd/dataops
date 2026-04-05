@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send } from 'lucide-react';
 import apiClient from '../api/axios';
+import { getPresignedDownloadUrl } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import { soundService } from '../utils/soundService';
 import { formatTimeAgo as timeAgo } from '../utils/dateUtils';
 
-interface Msg { id: string; sender_id: string; sender_role: string; content: string; is_read: boolean; created_at: string }
+interface Msg { id: string; sender_id: string; sender_role: string; content: string; message_type?: string; file_name?: string; document_id?: string; is_read: boolean; created_at: string }
 
 export default function ClientMessagesPage() {
   const { user } = useAuth();
@@ -146,7 +147,14 @@ export default function ClientMessagesPage() {
                   <div style={{ maxWidth: '68%' }}>
                     {!isMe && <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4, marginLeft: 4 }}>Votre cabinet</div>}
                     <div style={{ background: isMe ? 'linear-gradient(135deg,#2563EB,#7C3AED)' : '#fff', color: isMe ? '#fff' : '#111827', borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px', padding: '12px 16px', boxShadow: isMe ? '0 4px 12px rgba(37,99,235,0.3)' : '0 2px 8px rgba(0,0,0,0.06)', border: isMe ? 'none' : '1px solid #E5E7EB' }}>
-                      <div style={{ fontSize: 14, lineHeight: 1.6 }}>{m.content}</div>
+                      {m.message_type === 'file' && m.document_id ? (
+                        <div onClick={async () => { try { const url = await getPresignedDownloadUrl(m.document_id!); window.open(url, '_blank'); } catch {} }}
+                          style={{ background: isMe ? 'rgba(255,255,255,0.15)' : '#F8FAFC', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: m.content && m.content !== `📎 ${m.file_name}` ? 6 : 0, border: isMe ? '1px solid rgba(255,255,255,0.2)' : '1px solid #E5E7EB' }}>
+                          <span style={{ fontSize: 22, flexShrink: 0 }}>{m.file_name?.endsWith('.pdf') ? '📄' : m.file_name?.match(/\.(jpg|jpeg|png)$/i) ? '🖼️' : m.file_name?.match(/\.(xlsx|xls)$/i) ? '📊' : '📎'}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.file_name || 'Document'}</div><div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>Appuyez pour télécharger ↓</div></div>
+                        </div>
+                      ) : null}
+                      {(m.message_type !== 'file' || (m.content && m.content !== `📎 ${m.file_name}`)) && <div style={{ fontSize: 14, lineHeight: 1.6 }}>{m.content}</div>}
                       <div style={{ fontSize: 10, marginTop: 6, opacity: 0.7, textAlign: 'right' }}>{timeAgo(m.created_at)}{isMe && <span style={{ marginLeft: 4 }}>{m.is_read ? '✓✓' : '✓'}</span>}</div>
                     </div>
                   </div>
