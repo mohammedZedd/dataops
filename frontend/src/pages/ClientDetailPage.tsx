@@ -632,7 +632,7 @@ function IconBtn({ onClick, title, disabled, active, color, bgHover, children }:
 }) {
   return (
     <button onClick={onClick} disabled={disabled} title={title}
-      style={{ height: 32, width: 32, borderRadius: 8, border: 'none', background: active ? (bgHover || '#F3F4F6') : 'transparent', cursor: disabled ? 'default' : 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: color || '#9CA3AF', transition: 'all 0.15s', opacity: disabled ? 0.5 : 1 }}
+      style={{ height: 32, width: 32, borderRadius: 8, border: '1px solid #E5E7EB', background: active ? (bgHover || '#F3F4F6') : '#fff', cursor: disabled ? 'default' : 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: color || '#9CA3AF', transition: 'all 0.15s', opacity: disabled ? 0.5 : 1 }}
       onMouseEnter={e => { if (!disabled) { (e.currentTarget as HTMLButtonElement).style.background = bgHover || '#EFF6FF'; (e.currentTarget as HTMLButtonElement).style.color = color || '#3B82F6'; } }}
       onMouseLeave={e => { if (!disabled && !active) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = color || '#9CA3AF'; } }}>
       {children}
