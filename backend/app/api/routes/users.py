@@ -69,5 +69,6 @@ def update_user(
         regime_fiscal=client.regime_fiscal if client else None,
         forme_juridique=client.forme_juridique if client else None,
         is_active=target.is_active,
+        access_level=getattr(target, 'access_level', 'full'),
         created_at=target.created_at,
     )

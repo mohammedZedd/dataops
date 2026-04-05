@@ -40,4 +40,5 @@ class ClientUserRead(BaseModel):
     forme_juridique: Optional[str] = None
     documents_count: int = 0
     is_active: bool
+    access_level: str = "full"
     created_at: datetime

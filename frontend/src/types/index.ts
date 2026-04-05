@@ -140,6 +140,7 @@ export interface ClientUser {
   forme_juridique?: string | null;
   documents_count?: number;
   is_active: boolean;
+  access_level?: AccessLevel;
   created_at: string;
 }
 

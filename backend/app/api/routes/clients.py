@@ -82,6 +82,7 @@ def list_client_users(
             forme_juridique=forme_juridique,
             documents_count=docs_count,
             is_active=u.is_active,
+            access_level=getattr(u, 'access_level', 'full'),
             created_at=u.created_at,
         ))
     return result

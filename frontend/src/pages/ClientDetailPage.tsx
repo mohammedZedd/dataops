@@ -150,13 +150,13 @@ export default function ClientDetailPage() {
 
   async function handleRevoke() {
     if (!clientUser) return; setRevoking(true);
-    try { await revokeClientAccess(clientUser.id); setClientUser({ ...clientUser, is_active: false }); }
+    try { await revokeClientAccess(clientUser.id); setClientUser({ ...clientUser, access_level: 'readonly' }); }
     catch { /* ignore */ } finally { setRevoking(false); }
   }
 
   async function handleReactivate() {
     if (!clientUser) return; setRevoking(true);
-    try { await restoreClientAccess(clientUser.id); setClientUser({ ...clientUser, is_active: true }); }
+    try { await restoreClientAccess(clientUser.id); setClientUser({ ...clientUser, is_active: true, access_level: 'full' }); }
     catch { /* ignore */ } finally { setRevoking(false); }
   }
 
@@ -206,7 +206,8 @@ export default function ClientDetailPage() {
 
   const initials = clientUser ? `${clientUser.first_name.charAt(0)}${clientUser.last_name.charAt(0)}`.toUpperCase() : client.name.charAt(0).toUpperCase();
   const displayName = clientUser ? `${clientUser.first_name} ${clientUser.last_name}` : client.name;
-  const isActive = clientUser?.is_active ?? true;
+  const accessLevel = clientUser?.access_level ?? 'full';
+  const isActive = (clientUser?.is_active ?? true) && accessLevel !== 'blocked' && accessLevel !== 'readonly';
   const groups = groupByMonth(docs);
 
   // ─── Render ────────────────────────────────────────────────────────────────
