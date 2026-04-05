@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -18,6 +19,9 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 class SendMessageRequest(BaseModel):
     content: str
     message_type: str = "text"
+    file_name: Optional[str] = None
+    file_url: Optional[str] = None
+    document_id: Optional[str] = None
 
 
 def _conv_dict(conv: Conversation, last_msg: Message | None, unread: int, client: Client | None, client_user: User | None):
@@ -79,7 +83,7 @@ def get_messages(conv_id: str, db: Session = Depends(get_db), current_user: User
     db.execute(update(Message).where(Message.conversation_id == conv_id, Message.sender_id != current_user.id, Message.is_read == False).values(is_read=True))
     db.commit()
 
-    return {"messages": [{"id": m.id, "conversation_id": m.conversation_id, "sender_id": m.sender_id, "sender_role": m.sender_role, "content": m.content, "message_type": m.message_type, "is_read": m.is_read, "created_at": m.created_at.isoformat()} for m in msgs]}
+    return {"messages": [{"id": m.id, "conversation_id": m.conversation_id, "sender_id": m.sender_id, "sender_role": m.sender_role, "content": m.content, "message_type": m.message_type, "file_name": m.file_name, "file_url": m.file_url, "document_id": m.document_id, "is_read": m.is_read, "created_at": m.created_at.isoformat()} for m in msgs]}
 
 
 @router.post("/conversations/{conv_id}/messages")
@@ -90,7 +94,7 @@ def send_message(conv_id: str, payload: SendMessageRequest, db: Session = Depend
     if not payload.content.strip():
         raise HTTPException(status_code=400, detail="Message vide.")
 
-    msg = Message(conversation_id=conv_id, sender_id=current_user.id, sender_role=current_user.role.value if hasattr(current_user.role, 'value') else current_user.role, content=payload.content.strip(), message_type=payload.message_type)
+    msg = Message(conversation_id=conv_id, sender_id=current_user.id, sender_role=current_user.role.value if hasattr(current_user.role, 'value') else current_user.role, content=payload.content.strip(), message_type=payload.message_type, file_name=payload.file_name, file_url=payload.file_url, document_id=payload.document_id)
     db.add(msg)
     conv.last_message_at = datetime.utcnow()
     db.commit()
@@ -101,7 +105,7 @@ def send_message(conv_id: str, payload: SendMessageRequest, db: Session = Depend
         notification_service.notify_staff(db, company_id=conv.company_id, type="new_message", title="Nouveau message", message=f"{current_user.first_name} {current_user.last_name}: {msg.content[:60]}", link=f"/chat?conversation={conv_id}", client_id=conv.client_id)
         db.commit()
 
-    return {"id": msg.id, "conversation_id": msg.conversation_id, "sender_id": msg.sender_id, "sender_role": msg.sender_role, "content": msg.content, "message_type": msg.message_type, "is_read": msg.is_read, "created_at": msg.created_at.isoformat()}
+    return {"id": msg.id, "conversation_id": msg.conversation_id, "sender_id": msg.sender_id, "sender_role": msg.sender_role, "content": msg.content, "message_type": msg.message_type, "file_name": msg.file_name, "file_url": msg.file_url, "document_id": msg.document_id, "is_read": msg.is_read, "created_at": msg.created_at.isoformat()}
 
 
 @router.get("/unread-count")

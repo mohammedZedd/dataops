@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MessageSquare, X, Send, ArrowLeft } from 'lucide-react';
+import { MessageSquare, X, Send, ArrowLeft, Paperclip } from 'lucide-react';
 import apiClient from '../api/axios';
+import { getPresignedDownloadUrl } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import { soundService } from '../utils/soundService';
 
-interface Msg { id: string; sender_id: string; sender_role: string; content: string; is_read: boolean; created_at: string }
+interface Msg { id: string; sender_id: string; sender_role: string; content: string; message_type: string; file_name?: string; file_url?: string; document_id?: string; is_read: boolean; created_at: string }
 interface Conv { id: string; client_name: string | null; client_company: string | null; unread_count: number; last_message: { content: string; created_at: string } | null; last_message_at: string | null }
 
 function timeAgo(d: string) {
@@ -27,7 +28,9 @@ export function ChatWidget() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [totalUnread, setTotalUnread] = useState(0);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const prevMsgCount = useRef(0);
 
   const isClient = user?.role === 'client';
@@ -69,21 +72,33 @@ export function ChatWidget() {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
 
   async function handleSend() {
-    if (!text.trim() || sending) return;
-    const content = text.trim(); setText(''); setSending(true);
+    if ((!text.trim() && !attachedFile) || sending) return;
+    const content = text.trim(); const file = attachedFile;
+    setText(''); setAttachedFile(null); setSending(true);
     try {
       let cid = activeConvId;
-      if (!cid && isClient) {
-        const { data } = await apiClient.post('/chat/conversations');
-        cid = data.id; setActiveConvId(cid);
-      }
+      if (!cid && isClient) { const { data } = await apiClient.post('/chat/conversations'); cid = data.id; setActiveConvId(cid); }
       if (!cid) return;
-      const { data } = await apiClient.post(`/chat/conversations/${cid}/messages`, { content, message_type: 'text' });
-      setMsgs(p => [...p, data]);
+
+      if (file) {
+        // Upload file then send message with reference
+        const form = new FormData(); form.append('file', file);
+        if (activeConvId) { const conv = convs.find(c => c.id === activeConvId); if (conv?.client_id) form.append('client_id', conv.client_id); }
+        const { data: uploadData } = await apiClient.post('/documents/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const { data } = await apiClient.post(`/chat/conversations/${cid}/messages`, { content: content || `📎 ${file.name}`, message_type: 'file', file_name: file.name, document_id: uploadData.id });
+        setMsgs(p => [...p, data]);
+      } else {
+        const { data } = await apiClient.post(`/chat/conversations/${cid}/messages`, { content, message_type: 'text' });
+        setMsgs(p => [...p, data]);
+      }
       prevMsgCount.current += 1;
       soundService.playMessageSent();
-    } catch { setText(content); }
+    } catch { setText(content); if (file) setAttachedFile(file); }
     finally { setSending(false); }
+  }
+
+  async function handleDownloadFile(docId: string) {
+    try { const url = await getPresignedDownloadUrl(docId); window.open(url, '_blank'); } catch { /* */ }
   }
 
   if (!user) return null;
@@ -173,7 +188,14 @@ export function ChatWidget() {
                     <div key={m.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', gap: 8, alignItems: 'flex-end' }}>
                       {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: m.sender_role === 'client' ? 'linear-gradient(#3B82F6,#1D4ED8)' : 'linear-gradient(#059669,#047857)', color: '#fff', fontSize: 11, fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{m.sender_role === 'client' ? (activeConv?.client_name?.charAt(0) ?? 'C') : 'C'}</div>}
                       <div style={{ maxWidth: '75%', background: isMe ? accent : '#fff', color: isMe ? '#fff' : '#111827', borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px', padding: '10px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: isMe ? 'none' : '1px solid #E5E7EB' }}>
-                        <div style={{ fontSize: 13, lineHeight: 1.5 }}>{m.content}</div>
+                        {m.message_type === 'file' && m.document_id ? (
+                          <div onClick={() => handleDownloadFile(m.document_id!)} style={{ background: isMe ? 'rgba(255,255,255,0.15)' : '#F8FAFC', borderRadius: 6, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: m.content && m.content !== `📎 ${m.file_name}` ? 6 : 0 }}>
+                            <span style={{ fontSize: 18 }}>📎</span>
+                            <span style={{ fontSize: 12, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.file_name}</span>
+                            <span style={{ fontSize: 12, opacity: 0.6 }}>↓</span>
+                          </div>
+                        ) : null}
+                        {(m.message_type !== 'file' || (m.content && m.content !== `📎 ${m.file_name}`)) && <div style={{ fontSize: 13, lineHeight: 1.5 }}>{m.content}</div>}
                         <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7, textAlign: 'right' }}>{timeAgo(m.created_at)}{isMe && <span style={{ marginLeft: 4 }}>{m.is_read ? '✓✓' : '✓'}</span>}</div>
                       </div>
                     </div>
@@ -181,7 +203,15 @@ export function ChatWidget() {
                 })}
                 <div ref={endRef} />
               </div>
-              <div style={{ padding: '12px 16px', borderTop: '1px solid #E5E7EB', background: '#fff', display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ padding: '12px 16px', borderTop: '1px solid #E5E7EB', background: '#fff', display: 'flex', gap: 8, alignItems: 'flex-end', position: 'relative' }}>
+                <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f && f.size <= 10485760) setAttachedFile(f); e.target.value = ''; }} />
+                {attachedFile && (
+                  <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, padding: '6px 12px', background: '#EFF6FF', borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#1E40AF' }}>
+                    <span>📎 {attachedFile.name}</span>
+                    <button onClick={() => setAttachedFile(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', fontSize: 12 }}>✕</button>
+                  </div>
+                )}
+                {isStaff && <button onClick={() => fileInputRef.current?.click()} title="Joindre un fichier" style={{ width: 32, height: 32, borderRadius: '50%', background: attachedFile ? '#EFF6FF' : 'transparent', border: '1px solid #E5E7EB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#9CA3AF' }}><Paperclip size={14} /></button>}
                 <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder={isClient ? 'Écrivez un message…' : 'Répondre…'} rows={1} style={{ flex: 1, border: '1px solid #E5E7EB', borderRadius: 12, padding: '10px 14px', fontSize: 13, resize: 'none', outline: 'none', maxHeight: 80, fontFamily: 'inherit' }} />
                 <button onClick={handleSend} disabled={!text.trim() || sending} style={{ width: 38, height: 38, borderRadius: '50%', background: text.trim() ? accent : '#E5E7EB', border: 'none', cursor: text.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Send size={16} color="#fff" />

@@ -29,5 +29,8 @@ class Message(Base):
     sender_role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     message_type: Mapped[str] = mapped_column(String(20), default="text", nullable=False)
+    file_name: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    file_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    document_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("documents.id"), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
