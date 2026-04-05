@@ -83,6 +83,13 @@ export default function ProfilePage() {
 
   if (!user) return null;
   const initials = `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase();
+  const isClient = user.role === 'client';
+  const roleBadge = isClient
+    ? { label: 'Client', bg: '#EFF6FF', color: '#3B82F6' }
+    : user.role === 'admin'
+    ? { label: 'Administrateur', bg: '#FFF7ED', color: '#C2410C' }
+    : { label: 'Comptable', bg: '#ECFDF5', color: '#059669' };
+  const avatarGradient = isClient ? 'linear-gradient(135deg,#3B82F6,#1D4ED8)' : 'linear-gradient(135deg,#059669,#047857)';
 
   const FISCAL = [
     { key: 'ice', label: 'ICE', desc: 'Identifiant Commun de l\'Entreprise', max: 15 },
@@ -110,10 +117,10 @@ export default function ProfilePage() {
 
       {/* Profile header */}
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: '24px 28px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
-        <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)', color: '#fff', fontSize: 26, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
+        <div style={{ width: 72, height: 72, borderRadius: '50%', background: avatarGradient, color: '#fff', fontSize: 26, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: '#111827' }}>{user.first_name} {user.last_name}</h2>
-          <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500 }}>Client</span>
+          <span style={{ background: roleBadge.bg, color: roleBadge.color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500 }}>{roleBadge.label}</span>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#6B7280' }}>{user.email}</p>
         </div>
         {!editMode ? (
@@ -137,7 +144,7 @@ export default function ProfilePage() {
       </Section>
 
       {/* Section: Entreprise */}
-      <Section title="Entreprise">
+      {isClient && <Section title="Entreprise">
         <Row label="NOM DE L'ENTREPRISE" value={user.client_company_name ?? '—'} editValue={edit.company} onChange={v => setEdit(e => ({ ...e, company: v }))} editMode={editMode} />
         <div style={{ padding: '14px 20px', borderBottom: '1px solid #F3F4F6' }}>
           <p style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>SECTEUR D'ACTIVITÉ</p>
@@ -154,9 +161,10 @@ export default function ProfilePage() {
           {editMode ? <SearchableSelect options={FORMES_JURIDIQUES} value={edit.forme} onChange={v => setEdit(e => ({ ...e, forme: v }))} placeholder="Sélectionner…" />
             : <p style={{ fontSize: 15, fontWeight: 500, color: clientData?.forme_juridique ? '#111827' : '#9CA3AF' }}>{clientData?.forme_juridique ?? '—'}</p>}
         </div>
-      </Section>
+      </Section>}
 
-      {/* Section: Identifiants fiscaux */}
+      {/* Section: Identifiants fiscaux (client only) */}
+      {isClient && (
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
         <div style={{ padding: '14px 20px', background: '#FFFBEB', borderBottom: '1px solid #FEF3C7' }}>
           <p style={{ fontWeight: 600, fontSize: 14, color: '#92400E' }}>Identifiants fiscaux</p>
@@ -183,6 +191,35 @@ export default function ProfilePage() {
           );
         })}
       </div>
+      )}
+
+      {/* Section: Rôle et permissions (non-client) */}
+      {!isClient && (
+        <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 16, padding: '20px 24px', marginBottom: 16 }}>
+          <p style={{ fontWeight: 600, fontSize: 14, color: '#1E40AF', marginBottom: 12 }}>Rôle et permissions</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ background: '#DBEAFE', color: '#1D4ED8', padding: '4px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600 }}>{roleBadge.label}</span>
+            <span style={{ fontSize: 12, color: '#3B82F6' }}>Accès complet au cabinet</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {['Gérer les clients', 'Uploader des documents', 'Créer et valider des factures', 'Imputations comptables', 'Exporter les journaux Excel', 'Consulter tous les documents'].map((p, i) => (
+              <div key={i} style={{ fontSize: 13, color: '#1E40AF', display: 'flex', alignItems: 'center', gap: 4 }}>✅ {p}</div>
+            ))}
+          </div>
+          <p style={{ marginTop: 12, fontSize: 11, color: '#60A5FA', fontStyle: 'italic' }}>Vos permissions sont gérées par l'administrateur</p>
+        </div>
+      )}
+
+      {/* Infos cabinet (non-client) */}
+      {!isClient && user.company_name && (
+        <Section title="Cabinet">
+          <div style={{ padding: '14px 20px' }}>
+            <p style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>CABINET COMPTABLE</p>
+            <p style={{ fontSize: 15, fontWeight: 500, color: '#111827' }}>{user.company_name}</p>
+            <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 3 }}>Géré par l'administrateur du cabinet</p>
+          </div>
+        </Section>
+      )}
 
       {/* Section: Sécurité */}
       <Section title="Sécurité">

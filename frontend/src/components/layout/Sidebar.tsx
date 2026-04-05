@@ -35,6 +35,7 @@ const NAV_ADMIN: { section: string; items: NavItem[] }[] = [
     section: 'Compte',
     items: [
       { to: '/invitations', label: 'Invitations', icon: <Users size={16} /> },
+      { to: '/profile', label: 'Mon profil', icon: <UserCircle size={16} /> },
       { to: '/settings', label: 'Paramètres', icon: <Settings size={16} /> },
       { to: '/help', label: 'Aide', icon: <HelpCircle size={16} /> },
     ],

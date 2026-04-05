@@ -37,6 +37,7 @@ export default function App() {
               <Route path="invitations" element={<InvitationsPage />} />
               <Route path="client/documents" element={<ClientDocumentsPage />} />
               <Route path="client/profile" element={<ProfilePage />} />
+              <Route path="profile" element={<ProfilePage />} />
             </Route>
           </Route>
 
