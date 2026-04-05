@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Upload, FileText, ImageIcon, FileSpreadsheet, Download, Trash2,
-  CheckCircle, AlertCircle, Eye, X, Camera, Mic, MicOff, Square,
-  RotateCcw, Play, Pause,
+  CheckCircle, AlertCircle, Eye, X, Mic, MicOff, Square,
+  Play, Pause,
 } from 'lucide-react';
 import { getMyDocuments, uploadDocument, getPresignedDownloadUrl, getPresignedPreviewUrl, deleteDocument } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
@@ -68,9 +68,7 @@ function StatusBadge({ status }: { status: ClientDocument['status'] }) {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap border ${c.cls}`}>{c.label}</span>;
 }
 
-type UploadTab = 'file' | 'camera' | 'voice';
-
-const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|Android/i.test(navigator.userAgent);
+type UploadTab = 'file' | 'voice';
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -89,14 +87,6 @@ export default function ClientDocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [toast, setToast] = useState<'success' | 'deleted' | 'error' | null>(null);
-
-  // Camera
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Voice
   const [isRecording, setIsRecording] = useState(false);
@@ -127,11 +117,6 @@ export default function ClientDocumentsPage() {
   }, []);
 
   useEffect(() => { fetchDocs(); }, [fetchDocs]);
-
-  // Cleanup camera on unmount
-  useEffect(() => {
-    return () => { cameraStream?.getTracks().forEach(t => t.stop()); };
-  }, [cameraStream]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -185,7 +170,6 @@ export default function ClientDocumentsPage() {
       setSelected(null);
       setAudioFile(null);
       setAudioUrl(null);
-      setPhotoPreview(null);
       setVoiceDescription('');
       setProgress(0);
       showToast('success');
@@ -195,56 +179,6 @@ export default function ClientDocumentsPage() {
     } finally {
       setUploading(false);
     }
-  }
-
-  // ─── Camera ────────────────────────────────────────────────────────────────
-
-  async function startCamera() {
-    setCameraError(null);
-    if (isMobile) {
-      cameraInputRef.current?.click();
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setCameraStream(stream);
-      setCameraActive(true);
-    } catch {
-      setCameraError("Accès à la caméra refusé. Utilisez l'option Fichier pour uploader une photo.");
-    }
-  }
-
-  function stopCamera() {
-    cameraStream?.getTracks().forEach(t => t.stop());
-    setCameraStream(null);
-    setCameraActive(false);
-  }
-
-  function capturePhoto() {
-    if (!videoRef.current) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    canvas.getContext('2d')!.drawImage(videoRef.current, 0, 0);
-    canvas.toBlob(blob => {
-      if (!blob) return;
-      const file = new File([blob], `photo_facture_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setSelected(file);
-      stopCamera();
-      setPhotoPreview(URL.createObjectURL(blob));
-    }, 'image/jpeg', 0.9);
-  }
-
-  function handleCameraFileInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelected(file);
-      setPhotoPreview(URL.createObjectURL(file));
-    }
-    e.target.value = '';
   }
 
   // ─── Voice ─────────────────────────────────────────────────────────────────
@@ -411,7 +345,6 @@ export default function ClientDocumentsPage() {
         <div className="flex gap-3">
           {([
             { id: 'file' as UploadTab, icon: <Upload size={20} />, label: 'Fichier' },
-            { id: 'camera' as UploadTab, icon: <Camera size={20} />, label: 'Photo' },
             { id: 'voice' as UploadTab, icon: <Mic size={20} />, label: 'Note vocale' },
           ]).map(t => (
             <button
@@ -458,45 +391,7 @@ export default function ClientDocumentsPage() {
           </div>
         )}
 
-        {/* ─── Camera tab ──────────────────────────────────────────────────── */}
-        {tab === 'camera' && (
-          <div className="space-y-3">
-            {/* Hidden native file input for mobile */}
-            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCameraFileInput} />
 
-            {cameraError && (
-              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                <p className="text-[12px] text-amber-700">{cameraError}</p>
-              </div>
-            )}
-
-            {photoPreview ? (
-              <div className="flex flex-col items-center gap-3">
-                <img src={photoPreview} alt="Photo capturée" className="max-h-64 rounded-lg border border-gray-200" />
-                <p className="text-sm text-green-600 font-medium">Photo capturée — prête à envoyer</p>
-                <button onClick={() => { setSelected(null); setPhotoPreview(null); }} className="text-xs text-gray-500 hover:text-gray-700 underline">Reprendre</button>
-              </div>
-            ) : cameraActive ? (
-              <div className="relative rounded-xl overflow-hidden bg-black">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full" style={{ maxHeight: 360 }} />
-                <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-4 py-4 bg-gradient-to-t from-black/60">
-                  <button onClick={stopCamera} className="px-3 py-1.5 text-sm text-white/80 hover:text-white">Annuler</button>
-                  <button onClick={capturePhoto} className="h-14 w-14 rounded-full bg-white border-4 border-white/30 shadow-lg hover:scale-105 transition-transform" />
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={startCamera}
-                className="w-full border-2 border-dashed border-gray-300 rounded-xl px-6 py-10 flex flex-col items-center gap-3 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
-              >
-                <div className="h-14 w-14 rounded-full bg-blue-50 flex items-center justify-center"><Camera size={28} className="text-blue-500" /></div>
-                <p className="text-sm font-medium text-gray-700">{isMobile ? 'Ouvrir la caméra' : 'Activer la caméra'}</p>
-                <p className="text-xs text-gray-400">{isMobile ? 'Prenez une photo de votre document' : 'Capturez directement depuis votre webcam'}</p>
-              </button>
-            )}
-          </div>
-        )}
 
         {/* ─── Voice tab ───────────────────────────────────────────────────── */}
         {tab === 'voice' && (
