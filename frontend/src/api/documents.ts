@@ -33,6 +33,22 @@ export async function getDocumentStats(): Promise<DocumentStats> {
   return data;
 }
 
+export interface ClientDocSummary {
+  client: { id: string; name: string; full_name: string; email: string | null };
+  total_documents: number;
+  pending_count: number;
+  validated_count: number;
+  rejected_count: number;
+  urgent_count: number;
+  last_upload_at: string;
+  recent_files: string[];
+}
+
+export async function getDocumentsByClientSummary(): Promise<ClientDocSummary[]> {
+  const { data } = await apiClient.get<ClientDocSummary[]>('/documents/by-client');
+  return data;
+}
+
 export async function getClientDocuments(clientId: string): Promise<AdminClientDoc[]> {
   const { data } = await apiClient.get<AdminClientDoc[]>(`/clients/${clientId}/documents`);
   return data;

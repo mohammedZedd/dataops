@@ -264,6 +264,70 @@ def get_documents_stats(
     }
 
 
+@router.get("/documents/by-client")
+def get_documents_by_client_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from datetime import datetime, timedelta
+    from sqlalchemy import or_
+    from app.models.invoice import Invoice as InvoiceModel
+
+    if current_user.role == UserRole.CLIENT:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
+
+    three_days_ago = datetime.utcnow() - timedelta(days=3)
+    clients_list = db.query(Client).filter(Client.company_id == current_user.company_id).all()
+
+    result = []
+    for c in clients_list:
+        docs = (
+            db.query(Document)
+            .filter(Document.client_id == c.id)
+            .order_by(Document.uploaded_at.desc())
+            .all()
+        )
+        if not docs:
+            continue
+
+        pending = 0
+        validated = 0
+        rejected = 0
+        urgent = 0
+        for d in docs:
+            inv = d.invoice
+            if inv is None or inv.status == "to_review":
+                pending += 1
+                if d.uploaded_at <= three_days_ago:
+                    urgent += 1
+            elif inv.status == "validated":
+                validated += 1
+            elif inv.status == "rejected":
+                rejected += 1
+
+        # Find linked user for name/email
+        linked_user = db.query(User).filter(User.client_id == c.id).first()
+
+        result.append({
+            "client": {
+                "id": c.id,
+                "name": c.name,
+                "full_name": f"{linked_user.first_name} {linked_user.last_name}" if linked_user else c.name,
+                "email": linked_user.email if linked_user else None,
+            },
+            "total_documents": len(docs),
+            "pending_count": pending,
+            "validated_count": validated,
+            "rejected_count": rejected,
+            "urgent_count": urgent,
+            "last_upload_at": docs[0].uploaded_at.isoformat(),
+            "recent_files": [d.file_name for d in docs[:3]],
+        })
+
+    result.sort(key=lambda x: x["last_upload_at"], reverse=True)
+    return result
+
+
 @router.get("/documents/all", response_model=list[DocumentRead])
 def list_all_documents(
     db: Session = Depends(get_db),
