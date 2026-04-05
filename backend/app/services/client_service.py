@@ -30,6 +30,11 @@ def _to_read(db: Session, client: Client) -> ClientRead:
         secteur_activite=client.secteur_activite,
         regime_fiscal=client.regime_fiscal,
         forme_juridique=client.forme_juridique,
+        ice=client.ice,
+        if_number=client.if_number,
+        rc=client.rc,
+        tp=client.tp,
+        cnss=client.cnss,
         documents_count=docs_count,
         invoices_to_review=to_review,
     )

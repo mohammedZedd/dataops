@@ -84,6 +84,15 @@ export interface InvitationAcceptPayload {
   last_name: string;
   phone_number: string;
   password: string;
+  company_name?: string;
+  secteur_activite?: string;
+  forme_juridique?: string;
+  regime_fiscal?: string;
+  ice?: string;
+  if_number?: string;
+  rc?: string;
+  tp?: string;
+  cnss?: string;
 }
 
 // ─── Statuts ──────────────────────────────────────────────────────────────────
@@ -142,6 +151,11 @@ export interface Client {
   secteur_activite?: string | null;
   regime_fiscal?: string | null;
   forme_juridique?: string | null;
+  ice?: string | null;
+  if_number?: string | null;
+  rc?: string | null;
+  tp?: string | null;
+  cnss?: string | null;
   documents_count: number;
   invoices_to_review: number;
   created_at: string;

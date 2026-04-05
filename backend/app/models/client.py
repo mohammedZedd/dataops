@@ -19,6 +19,11 @@ class Client(Base):
     secteur_activite: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     regime_fiscal: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     forme_juridique: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ice: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    if_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    rc: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    tp: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    cnss: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False

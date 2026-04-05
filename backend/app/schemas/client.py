@@ -17,6 +17,11 @@ class ClientRead(BaseModel):
     secteur_activite: Optional[str] = None
     regime_fiscal: Optional[str] = None
     forme_juridique: Optional[str] = None
+    ice: Optional[str] = None
+    if_number: Optional[str] = None
+    rc: Optional[str] = None
+    tp: Optional[str] = None
+    cnss: Optional[str] = None
     invoices_to_review: int = 0
     documents_count: int = 0
 

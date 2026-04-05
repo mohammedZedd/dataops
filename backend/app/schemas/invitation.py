@@ -65,5 +65,16 @@ class InvitationAcceptRequest(BaseModel):
     last_name: str
     phone_number: str
     password: str
+    # Company info (optional — CLIENT role only)
+    company_name: Optional[str] = None
+    secteur_activite: Optional[str] = None
+    forme_juridique: Optional[str] = None
+    regime_fiscal: Optional[str] = None
+    # Fiscal IDs (optional)
+    ice: Optional[str] = None
+    if_number: Optional[str] = None
+    rc: Optional[str] = None
+    tp: Optional[str] = None
+    cnss: Optional[str] = None
 
     model_config = ConfigDict(str_strip_whitespace=True)

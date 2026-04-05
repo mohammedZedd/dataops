@@ -259,6 +259,31 @@ def accept_invitation(payload: InvitationAcceptRequest, db: Session = Depends(ge
         client_id=invitation.client_id,
         phone_number=payload.phone_number,
     )
+
+    # Update linked Client with company/fiscal info from the registration form
+    if user.client_id:
+        client_record = db.get(Client, user.client_id)
+        if client_record:
+            if payload.company_name:
+                client_record.name = payload.company_name.strip()
+            if payload.secteur_activite:
+                client_record.secteur_activite = payload.secteur_activite
+            if payload.forme_juridique:
+                client_record.forme_juridique = payload.forme_juridique
+            if payload.regime_fiscal:
+                client_record.regime_fiscal = payload.regime_fiscal
+            if payload.ice:
+                client_record.ice = payload.ice
+            if payload.if_number:
+                client_record.if_number = payload.if_number
+            if payload.rc:
+                client_record.rc = payload.rc
+            if payload.tp:
+                client_record.tp = payload.tp
+            if payload.cnss:
+                client_record.cnss = payload.cnss
+            db.flush()
+
     invitation_service.accept_invitation(db, invitation)
 
     token = create_access_token(user.id)
