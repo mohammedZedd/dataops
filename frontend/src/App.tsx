@@ -12,6 +12,7 @@ import AccountingEntryPage from './pages/AccountingEntryPage';
 import DocumentsPage from './pages/DocumentsPage';
 import ChatPage from './pages/ChatPage';
 import SettingsPage from './pages/SettingsPage';
+import ClientMessagesPage from './pages/ClientMessagesPage';
 import InvitationsPage from './pages/InvitationsPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ClientDocumentsPage from './pages/ClientDocumentsPage';
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="accounting-entry" element={<AccountingEntryPage />} />
               <Route path="invitations" element={<InvitationsPage />} />
               <Route path="client/documents" element={<ClientDocumentsPage />} />
+              <Route path="client/messages" element={<ClientMessagesPage />} />
               <Route path="client/profile" element={<ProfilePage />} />
               <Route path="profile" element={<ProfilePage />} />
             </Route>

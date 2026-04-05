@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { MessageSquare, X, Send, ArrowLeft } from 'lucide-react';
 import apiClient from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,7 @@ function timeAgo(d: string) {
 export function ChatWidget() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [convs, setConvs] = useState<Conv[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
@@ -86,6 +87,8 @@ export function ChatWidget() {
   }
 
   if (!user) return null;
+  // Hide on dedicated messages/chat pages
+  if (location.pathname === '/client/messages' || location.pathname === '/chat') return null;
 
   const activeConv = convs.find(c => c.id === activeConvId);
   const showConvList = isStaff && !activeConvId;
