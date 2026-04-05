@@ -4,7 +4,7 @@ import {
   ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Calendar,
   User, Mail, Phone, Building2, Briefcase, FileText, ImageIcon,
   FileSpreadsheet, File as FileIcon, FolderOpen, Download,
-  Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X, Trash2, Plus,
+  Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X, Trash2, Plus, Pin, StickyNote, MessageSquare,
 } from 'lucide-react';
 import apiClient from '../api/axios';
 import { getClient, getClientUsers, updateClientUser, revokeClientAccess, restoreClientAccess } from '../api/clients';
@@ -124,6 +124,27 @@ export default function ClientDetailPage() {
   const defaultNewTask = { title: '', description: '', task_type: '', due_date: '', priority: 'normal', assigned_to_id: '' };
   const [newTask, setNewTask] = useState(defaultNewTask);
   const taskCount = groupedTasks.reduce((s, y) => s + y.total, 0);
+  const doneTasks = groupedTasks.reduce((s, y) => s + y.done, 0);
+
+  // Sub-tab + view
+  const [notesSubTab, setNotesSubTab] = useState('tasks');
+  const [taskView, setTaskView] = useState('kanban');
+
+  // Task detail modal + comments
+  interface TaskDetail extends Task { comments_count: number }
+  const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
+  interface Comment { id: string; content: string; created_at: string; author_name: string; author_initials: string }
+  const [taskComments, setTaskComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState('');
+
+  // Notes (sticky notes)
+  interface NoteAuthor { id: string | null; name: string; initials: string }
+  interface Note { id: string; title: string | null; content: string; color: string; is_pinned: boolean; created_at: string; updated_at: string; author: NoteAuthor }
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [showNewNoteForm, setShowNewNoteForm] = useState(false);
+  const [newNoteTitle, setNewNoteTitle] = useState('');
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [newNoteColor, setNewNoteColor] = useState('yellow');
 
   const fetchData = useCallback(async () => {
     if (!clientId) { setError('ID manquant.'); setLoading(false); return; }
@@ -265,6 +286,58 @@ export default function ClientDetailPage() {
     try { await apiClient.delete(`/clients/${clientId}/tasks/${taskId}`); fetchTasks(); } catch { /* */ }
   }
 
+  // ─── Task comments ────────────────────────────────────────────────────────
+
+  const fetchComments = useCallback(async (taskId: string) => {
+    if (!clientId) return;
+    try { const { data } = await apiClient.get(`/clients/${clientId}/tasks/${taskId}/comments`); setTaskComments(data); } catch { /* */ }
+  }, [clientId]);
+
+  useEffect(() => { if (selectedTask) fetchComments(selectedTask.id); }, [selectedTask?.id, fetchComments]);
+
+  async function handleAddComment() {
+    if (!newComment.trim() || !selectedTask || !clientId) return;
+    try {
+      const { data } = await apiClient.post(`/clients/${clientId}/tasks/${selectedTask.id}/comments`, { content: newComment.trim() });
+      setTaskComments(prev => [...prev, data]);
+      setNewComment('');
+      fetchTasks();
+    } catch { /* */ }
+  }
+
+  // ─── Notes (sticky notes) ────────────────────────────────────────────────
+
+  const fetchNotes = useCallback(async () => {
+    if (!clientId) return;
+    try { const { data } = await apiClient.get(`/clients/${clientId}/notes`); setNotes(data); } catch { /* */ }
+  }, [clientId]);
+
+  useEffect(() => { if (activeTab === 'notes' && notesSubTab === 'notes') fetchNotes(); }, [activeTab, notesSubTab, fetchNotes]);
+
+  async function handleCreateNote() {
+    if (!newNoteContent.trim() || !clientId) return;
+    try {
+      const { data } = await apiClient.post(`/clients/${clientId}/notes`, { title: newNoteTitle, content: newNoteContent, color: newNoteColor });
+      setNotes(prev => [data, ...prev]);
+      setShowNewNoteForm(false); setNewNoteTitle(''); setNewNoteContent(''); setNewNoteColor('yellow');
+    } catch { /* */ }
+  }
+
+  async function handleUpdateNote(noteId: string, updates: { title?: string; content?: string; color?: string }) {
+    if (!clientId) return;
+    try { const { data } = await apiClient.patch(`/clients/${clientId}/notes/${noteId}`, updates); setNotes(prev => prev.map(n => n.id === noteId ? { ...n, ...data } : n)); } catch { /* */ }
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    if (!confirm('Supprimer cette note ?')) return;
+    try { await apiClient.delete(`/clients/${clientId}/notes/${noteId}`); setNotes(prev => prev.filter(n => n.id !== noteId)); } catch { /* */ }
+  }
+
+  async function handleTogglePin(noteId: string) {
+    if (!clientId) return;
+    try { const { data } = await apiClient.patch(`/clients/${clientId}/notes/${noteId}/pin`); setNotes(prev => prev.map(n => n.id === noteId ? { ...n, is_pinned: data.is_pinned } : n).sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned))); } catch { /* */ }
+  }
+
   // ─── Loading / Error ───────────────────────────────────────────────────────
 
   if (loading) return <div className="flex items-center justify-center py-24"><Loader2 size={24} className="text-blue-500 animate-spin" /></div>;
@@ -322,7 +395,7 @@ export default function ClientDetailPage() {
         {[
           { key: 'details', label: 'Détails du client', icon: <User size={16} /> },
           { key: 'documents', label: 'Documents', icon: <FileText size={16} /> },
-          { key: 'notes', label: 'Tâches', icon: <ClipboardList size={16} /> },
+          { key: 'notes', label: 'Tâches & Notes', icon: <ClipboardList size={16} /> },
         ].map((tab, i) => (
           <div key={tab.key} style={{ display: 'contents' }}>
           {i > 0 && <div style={{ width: 1, height: 20, background: '#E5E7EB', margin: '0 4px', flexShrink: 0 }} />}
@@ -637,83 +710,191 @@ export default function ClientDetailPage() {
         </div>
       )}
 
-      {/* ═══ TAB: Tâches ═══ */}
+      {/* ═══ TAB: Tâches & Notes ═══ */}
       {activeTab === 'notes' && (
         <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 0 32px' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}><ClipboardList size={22} /> Tâches & Suivi</h2>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7280' }}>Gérez les tâches liées à {client.name}</p>
-            </div>
-            <button onClick={() => setShowNewTaskForm(true)} style={{ padding: '10px 20px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={16} /> Nouvelle tâche
-            </button>
+          {/* Sub-tabs */}
+          <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #E5E7EB', marginBottom: 24 }}>
+            {[{ key: 'tasks', label: 'Tâches' }, { key: 'notes', label: 'Notes' }].map(tab => (
+              <button key={tab.key} onClick={() => setNotesSubTab(tab.key)} style={{ padding: '10px 24px', background: 'none', border: 'none', borderBottom: notesSubTab === tab.key ? '2px solid #3B82F6' : '2px solid transparent', marginBottom: -2, color: notesSubTab === tab.key ? '#3B82F6' : '#6B7280', fontWeight: notesSubTab === tab.key ? 600 : 400, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {tab.key === 'tasks' ? <ClipboardList size={15} /> : <StickyNote size={15} />}
+                {tab.label}
+                {tab.key === 'tasks' && taskCount > 0 && <span style={{ background: '#EFF6FF', color: '#3B82F6', borderRadius: 20, padding: '0 7px', fontSize: 11, fontWeight: 600 }}>{doneTasks}/{taskCount}</span>}
+                {tab.key === 'notes' && notes.length > 0 && <span style={{ background: '#FFF7ED', color: '#C2410C', borderRadius: 20, padding: '0 7px', fontSize: 11, fontWeight: 600 }}>{notes.length}</span>}
+              </button>
+            ))}
           </div>
 
-          {/* New task form */}
-          {showNewTaskForm && (
-            <div style={{ background: 'white', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 24px', marginBottom: 24, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
-              <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>Nouvelle tâche</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Titre *</label>
-                  <input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Ex: Envoyer le bilan 2026" style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Type de tâche *</label>
-                  <select value={newTask.task_type} onChange={e => setNewTask({ ...newTask, task_type: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}>
-                    <option value="">Sélectionner...</option>
-                    {TASK_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Priorité</label>
-                  <select value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}>
-                    <option value="low">Basse</option>
-                    <option value="normal">Normale</option>
-                    <option value="high">Haute</option>
-                    <option value="urgent">Urgente</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Échéance</label>
-                  <input type="date" value={newTask.due_date} onChange={e => setNewTask({ ...newTask, due_date: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer', boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Assigné à</label>
-                  <select value={newTask.assigned_to_id} onChange={e => setNewTask({ ...newTask, assigned_to_id: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}>
-                    <option value="">Non assigné</option>
-                    {accountants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Description (optionnel)</label>
-                  <textarea value={newTask.description} onChange={e => setNewTask({ ...newTask, description: e.target.value })} placeholder="Détails supplémentaires..." rows={2} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px', fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-                </div>
+          {/* ── TASKS sub-tab ── */}
+          {notesSubTab === 'tasks' && (<>
+            {/* View toggle + new task button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', gap: 0, background: '#F3F4F6', borderRadius: 8, padding: 3 }}>
+                {[{ key: 'kanban', label: 'Kanban' }, { key: 'tree', label: 'Liste' }].map(v => (
+                  <button key={v.key} onClick={() => setTaskView(v.key)} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: taskView === v.key ? 600 : 400, background: taskView === v.key ? 'white' : 'transparent', color: taskView === v.key ? '#111827' : '#6B7280', boxShadow: taskView === v.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>{v.label}</button>
+                ))}
               </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button onClick={() => { setShowNewTaskForm(false); setNewTask(defaultNewTask); }} style={{ padding: '9px 18px', background: 'white', border: '1px solid #E5E7EB', color: '#374151', borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontSize: 13 }}>Annuler</button>
-                <button onClick={handleCreateTask} disabled={!newTask.title.trim() || !newTask.task_type} style={{ padding: '9px 20px', background: newTask.title.trim() && newTask.task_type ? '#3B82F6' : '#E5E7EB', color: newTask.title.trim() && newTask.task_type ? 'white' : '#9CA3AF', border: 'none', borderRadius: 8, cursor: newTask.title.trim() && newTask.task_type ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 13 }}>Créer la tâche</button>
-              </div>
+              <button onClick={() => setShowNewTaskForm(true)} style={{ padding: '9px 18px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Nouvelle tâche</button>
             </div>
-          )}
 
-          {/* Tree view: Year → Month → Tasks */}
-          {groupedTasks.length === 0 && !showNewTaskForm ? (
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
-              <div style={{ height: 56, width: 56, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><ClipboardList size={26} color="#3B82F6" /></div>
-              <div style={{ fontWeight: 500, color: '#374151', fontSize: 16 }}>Aucune tâche pour ce client</div>
-              <div style={{ fontSize: 13, marginTop: 6 }}>Créez des tâches pour suivre votre travail</div>
-              <button onClick={() => setShowNewTaskForm(true)} style={{ marginTop: 16, padding: '10px 24px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Créer la première tâche</button>
+            {/* New task form */}
+            {showNewTaskForm && (
+              <div style={{ background: 'white', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 24px', marginBottom: 24, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>Nouvelle tâche</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Titre *</label>
+                    <input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Ex: Envoyer le bilan 2026" style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div><label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Type *</label><select value={newTask.task_type} onChange={e => setNewTask({ ...newTask, task_type: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}><option value="">Sélectionner...</option>{TASK_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}</select></div>
+                  <div><label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Priorité</label><select value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}><option value="low">Basse</option><option value="normal">Normale</option><option value="high">Haute</option><option value="urgent">Urgente</option></select></div>
+                  <div><label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Échéance</label><input type="date" value={newTask.due_date} onChange={e => setNewTask({ ...newTask, due_date: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', boxSizing: 'border-box' }} /></div>
+                  <div><label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Assigné à</label><select value={newTask.assigned_to_id} onChange={e => setNewTask({ ...newTask, assigned_to_id: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}><option value="">Non assigné</option>{accountants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                  <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Description</label><textarea value={newTask.description} onChange={e => setNewTask({ ...newTask, description: e.target.value })} placeholder="Détails..." rows={2} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px', fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} /></div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setShowNewTaskForm(false); setNewTask(defaultNewTask); }} style={{ padding: '9px 18px', background: 'white', border: '1px solid #E5E7EB', color: '#374151', borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontSize: 13 }}>Annuler</button>
+                  <button onClick={handleCreateTask} disabled={!newTask.title.trim() || !newTask.task_type} style={{ padding: '9px 20px', background: newTask.title.trim() && newTask.task_type ? '#3B82F6' : '#E5E7EB', color: newTask.title.trim() && newTask.task_type ? 'white' : '#9CA3AF', border: 'none', borderRadius: 8, cursor: newTask.title.trim() && newTask.task_type ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 13 }}>Créer la tâche</button>
+                </div>
+              </div>
+            )}
+
+            {/* Kanban view */}
+            {taskView === 'kanban' && (
+              (() => {
+                const allTasks = groupedTasks.flatMap(y => y.months.flatMap(m => m.tasks));
+                const cols = [
+                  { key: 'todo', label: 'À faire', color: '#6B7280', bg: '#F9FAFB', headerBg: '#F3F4F6', icon: '○' },
+                  { key: 'in_progress', label: 'En cours', color: '#3B82F6', bg: '#EFF6FF', headerBg: '#DBEAFE', icon: '◑' },
+                  { key: 'done', label: 'Terminé', color: '#16A34A', bg: '#F0FDF4', headerBg: '#DCFCE7', icon: '✓' },
+                  { key: 'cancelled', label: 'Annulé', color: '#EF4444', bg: '#FEF2F2', headerBg: '#FECACA', icon: '✕' },
+                ];
+                return allTasks.length === 0 && !showNewTaskForm ? (
+                  <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
+                    <div style={{ height: 56, width: 56, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><ClipboardList size={26} color="#3B82F6" /></div>
+                    <div style={{ fontWeight: 500, color: '#374151', fontSize: 16 }}>Aucune tâche pour ce client</div>
+                    <div style={{ fontSize: 13, marginTop: 6 }}>Créez des tâches pour suivre votre travail</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                    {cols.map(col => {
+                      const colTasks = allTasks.filter(t => t.status === col.key);
+                      return (
+                        <div key={col.key} style={{ background: col.bg, borderRadius: 12, overflow: 'hidden', minHeight: 200 }}>
+                          <div style={{ background: col.headerBg, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, color: col.color }}><span>{col.icon}</span> {col.label}</div>
+                            <span style={{ background: 'rgba(0,0,0,0.08)', borderRadius: 20, padding: '1px 8px', fontSize: 12, fontWeight: 600, color: col.color }}>{colTasks.length}</span>
+                          </div>
+                          <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {colTasks.map(task => <KanbanCard key={task.id} task={task} onOpenDetail={(t: TaskDetail) => setSelectedTask(t)} />)}
+                            {colTasks.length === 0 && <div style={{ textAlign: 'center', padding: '20px 10px', color: '#9CA3AF', fontSize: 12 }}>Aucune tâche</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
+            )}
+
+            {/* Tree view */}
+            {taskView === 'tree' && (
+              groupedTasks.length === 0 && !showNewTaskForm ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
+                  <div style={{ height: 56, width: 56, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><ClipboardList size={26} color="#3B82F6" /></div>
+                  <div style={{ fontWeight: 500, color: '#374151', fontSize: 16 }}>Aucune tâche pour ce client</div>
+                </div>
+              ) : (
+                groupedTasks.map(yearGroup => (
+                  <YearGroup key={yearGroup.year} yearGroup={yearGroup} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} accountants={accountants} />
+                ))
+              )
+            )}
+          </>)}
+
+          {/* ── NOTES sub-tab ── */}
+          {notesSubTab === 'notes' && (<>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <p style={{ margin: 0, fontSize: 13, color: '#6B7280' }}>Notes privées sur {client.name} — visibles uniquement par votre cabinet</p>
+              <button onClick={() => setShowNewNoteForm(true)} style={{ padding: '9px 18px', background: '#F59E0B', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Nouvelle note</button>
             </div>
-          ) : (
-            groupedTasks.map(yearGroup => (
-              <YearGroup key={yearGroup.year} yearGroup={yearGroup} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} accountants={accountants} />
-            ))
-          )}
+            {showNewNoteForm && (
+              <div style={{ background: getNoteColor(newNoteColor).bg, border: `1px solid ${getNoteColor(newNoteColor).border}`, borderRadius: 14, padding: '16px 20px', marginBottom: 20, borderLeft: `4px solid ${getNoteColor(newNoteColor).accent}` }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>{(['yellow', 'blue', 'green', 'pink', 'gray'] as const).map(c => (<button key={c} onClick={() => setNewNoteColor(c)} style={{ width: 20, height: 20, borderRadius: '50%', background: getNoteColor(c).accent, border: newNoteColor === c ? '2px solid #111827' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />))}</div>
+                <input value={newNoteTitle} onChange={e => setNewNoteTitle(e.target.value)} placeholder="Titre (optionnel)" style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 15, fontWeight: 600, color: '#111827', outline: 'none', marginBottom: 8, boxSizing: 'border-box' }} />
+                <textarea value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)} placeholder="Écrivez votre note ici..." autoFocus rows={4} style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 14, color: '#374151', outline: 'none', resize: 'none', lineHeight: 1.6, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => { setShowNewNoteForm(false); setNewNoteTitle(''); setNewNoteContent(''); setNewNoteColor('yellow'); }} style={{ padding: '7px 14px', background: 'white', border: '1px solid #E5E7EB', color: '#6B7280', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
+                  <button onClick={handleCreateNote} disabled={!newNoteContent.trim()} style={{ padding: '7px 16px', background: newNoteContent.trim() ? '#F59E0B' : '#E5E7EB', color: newNoteContent.trim() ? 'white' : '#9CA3AF', border: 'none', borderRadius: 8, cursor: newNoteContent.trim() ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 13 }}>Enregistrer</button>
+                </div>
+              </div>
+            )}
+            {notes.length === 0 && !showNewNoteForm ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
+                <div style={{ height: 56, width: 56, borderRadius: '50%', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><StickyNote size={26} color="#F59E0B" /></div>
+                <div style={{ fontWeight: 500, color: '#374151', fontSize: 16 }}>Aucune note pour ce client</div>
+                <div style={{ fontSize: 13, marginTop: 6 }}>Ajoutez des notes, rappels ou observations</div>
+                <button onClick={() => setShowNewNoteForm(true)} style={{ marginTop: 16, padding: '10px 24px', background: '#F59E0B', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Créer la première note</button>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                {notes.map(note => <NoteCard key={note.id} note={note} onUpdate={handleUpdateNote} onDelete={handleDeleteNote} onPin={handleTogglePin} />)}
+              </div>
+            )}
+          </>)}
         </div>
       )}
+
+      {/* Task detail modal */}
+      {selectedTask && (<>
+        <div onClick={() => { setSelectedTask(null); setNewComment(''); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999 }} />
+        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 620, maxHeight: '85vh', background: 'white', borderRadius: 16, boxShadow: '0 25px 60px rgba(0,0,0,0.15)', zIndex: 10000, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F3F4F6', borderRadius: 6, padding: '3px 10px', fontSize: 11, color: '#6B7280', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase' }}>{getTaskType(selectedTask.task_type).icon} {getTaskType(selectedTask.task_type).label}</div>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{selectedTask.title}</h3>
+            </div>
+            <button onClick={() => { setSelectedTask(null); setNewComment(''); }} style={{ background: '#F3F4F6', border: 'none', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+              <div><div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>Statut</div><select value={selectedTask.status} onChange={e => { handleUpdateTask(selectedTask.id, { status: e.target.value }); setSelectedTask({ ...selectedTask, status: e.target.value, progress: e.target.value === 'done' ? 100 : e.target.value === 'todo' ? 0 : selectedTask.progress }); }} style={{ width: '100%', height: 36, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 10px', fontSize: 13, cursor: 'pointer', background: 'white' }}><option value="todo">○ À faire</option><option value="in_progress">◑ En cours</option><option value="done">✓ Terminé</option><option value="cancelled">✕ Annulé</option></select></div>
+              <div><div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>Assigné à</div><select value={selectedTask.assignee?.id || ''} onChange={e => { handleUpdateTask(selectedTask.id, { assigned_to_id: e.target.value || null }); setSelectedTask({ ...selectedTask, assignee: accountants.find(a => a.id === e.target.value) || null }); }} style={{ width: '100%', height: 36, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 10px', fontSize: 13, cursor: 'pointer', background: 'white' }}><option value="">Non assigné</option>{accountants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+              <div><div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>Priorité</div><select value={selectedTask.priority} onChange={e => { handleUpdateTask(selectedTask.id, { priority: e.target.value }); setSelectedTask({ ...selectedTask, priority: e.target.value }); }} style={{ width: '100%', height: 36, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 10px', fontSize: 13, cursor: 'pointer', background: 'white' }}><option value="low">Basse</option><option value="normal">Normale</option><option value="high">Haute</option><option value="urgent">Urgente</option></select></div>
+              <div><div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>Échéance</div><input type="date" value={selectedTask.due_date?.split('T')[0] || ''} onChange={e => { handleUpdateTask(selectedTask.id, { due_date: e.target.value }); setSelectedTask({ ...selectedTask, due_date: e.target.value }); }} style={{ width: '100%', height: 36, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 10px', fontSize: 13, background: 'white', boxSizing: 'border-box' }} /></div>
+            </div>
+            {/* Progress */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, marginBottom: 8 }}><span>Progression</span><span style={{ color: '#3B82F6', fontSize: 13, fontWeight: 700 }}>{selectedTask.progress}%</span></div>
+              <input type="range" min="0" max="100" value={selectedTask.progress} onChange={e => { const v = parseInt(e.target.value); handleUpdateTask(selectedTask.id, { progress: v }); setSelectedTask({ ...selectedTask, progress: v }); }} style={{ width: '100%', cursor: 'pointer', accentColor: '#3B82F6' }} />
+              <div style={{ background: '#F3F4F6', borderRadius: 6, height: 8, overflow: 'hidden', marginTop: 4 }}><div style={{ width: `${selectedTask.progress}%`, background: selectedTask.progress === 100 ? '#22C55E' : '#3B82F6', height: '100%', borderRadius: 6, transition: 'width 0.3s' }} /></div>
+            </div>
+            {selectedTask.description && <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, marginBottom: 8 }}>Description</div><div style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, background: '#F9FAFB', borderRadius: 8, padding: '12px 14px', border: '1px solid #F3F4F6' }}>{selectedTask.description}</div></div>}
+            {/* Comments */}
+            <div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><MessageSquare size={13} /> Commentaires {taskComments.length > 0 && <span style={{ background: '#EFF6FF', color: '#3B82F6', borderRadius: 10, padding: '0 6px', fontSize: 10 }}>{taskComments.length}</span>}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                {taskComments.length === 0 && <div style={{ textAlign: 'center', padding: 16, color: '#9CA3AF', fontSize: 13, background: '#F9FAFB', borderRadius: 8 }}>Aucun commentaire</div>}
+                {taskComments.map(c => (
+                  <div key={c.id} style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{c.author_initials}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 13 }}>{c.author_name}</span><span style={{ fontSize: 11, color: '#9CA3AF' }}>{formatNoteTime(c.created_at)}</span></div>
+                      <div style={{ background: '#F9FAFB', borderRadius: '0 10px 10px 10px', padding: '10px 14px', border: '1px solid #F3F4F6', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{c.content}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <textarea value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }} placeholder="Ajouter un commentaire..." rows={2} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', lineHeight: 1.5 }} />
+                  {newComment.trim() && <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}><button onClick={() => setNewComment('')} style={{ padding: '6px 12px', fontSize: 12, background: 'white', border: '1px solid #E5E7EB', borderRadius: 6, cursor: 'pointer' }}>Annuler</button><button onClick={handleAddComment} style={{ padding: '6px 14px', fontSize: 12, background: '#3B82F6', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Commenter</button></div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>)}
 
       {/* Limit access confirmation modal */}
       {showLimitModal && (
@@ -794,6 +975,95 @@ function IconBtn({ onClick, title, disabled, active, color, bgHover, children }:
       onMouseLeave={e => { if (!disabled && !active) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = color || '#9CA3AF'; } }}>
       {children}
     </button>
+  );
+}
+
+// ─── Kanban card ────────────────────────────────────────────────────────────
+
+function KanbanCard({ task, onOpenDetail }: { task: Record<string, unknown>; onOpenDetail: (t: Record<string, unknown>) => void }) {
+  const typeInfo = getTaskType(task.task_type as string);
+  const pc: Record<string, string> = { low: '#3B82F6', normal: '#F59E0B', high: '#F97316', urgent: '#EF4444' };
+  const assignee = task.assignee as { id: string; name: string; initials: string } | null;
+  return (
+    <div onClick={() => onOpenDetail(task)} style={{ background: 'white', borderRadius: 10, padding: '12px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', border: '1px solid #E5E7EB', cursor: 'pointer', transition: 'all 0.15s', borderLeft: `3px solid ${pc[task.priority as string] || '#F59E0B'}` }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.07)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F3F4F6', borderRadius: 6, padding: '2px 8px', fontSize: 10, color: '#6B7280', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase' }}><span>{typeInfo.icon}</span> {typeInfo.label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 8, lineHeight: 1.4 }}>{task.title as string}</div>
+      {task.description && <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 8, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{task.description as string}</div>}
+      <div style={{ background: '#F3F4F6', borderRadius: 4, height: 4, overflow: 'hidden', marginBottom: 10 }}><div style={{ width: `${task.progress}%`, background: task.status === 'done' ? '#22C55E' : '#3B82F6', height: '100%', borderRadius: 4 }} /></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {task.due_date ? <span style={{ fontSize: 10, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 3 }}><Calendar size={10} />{new Date((task.due_date as string) + ((task.due_date as string).endsWith('Z') ? '' : 'Z')).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span> : <span />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {(task.comments_count as number) > 0 && <span style={{ fontSize: 10, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 2 }}><MessageSquare size={10} /> {task.comments_count as number}</span>}
+          {assignee ? <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={assignee.name}>{assignee.initials}</div> : <div style={{ width: 22, height: 22, borderRadius: '50%', border: '1.5px dashed #D1D5DB' }} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Note helpers ───────────────────────────────────────────────────────────
+
+function getNoteColor(color: string) {
+  const colors: Record<string, { bg: string; border: string; accent: string }> = {
+    yellow: { bg: '#FFFBEB', border: '#FDE68A', accent: '#F59E0B' },
+    blue: { bg: '#EFF6FF', border: '#BFDBFE', accent: '#3B82F6' },
+    green: { bg: '#F0FDF4', border: '#BBF7D0', accent: '#16A34A' },
+    pink: { bg: '#FDF2F8', border: '#F9A8D4', accent: '#EC4899' },
+    gray: { bg: '#F9FAFB', border: '#E5E7EB', accent: '#6B7280' },
+  };
+  return colors[color] || colors.yellow;
+}
+
+function formatNoteTime(iso: string) {
+  const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'));
+  const now = new Date();
+  const diff = (now.getTime() - d.getTime()) / 1000;
+  if (diff < 60) return "À l'instant";
+  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)}h`;
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+
+function NoteCard({ note, onUpdate, onDelete, onPin }: {
+  note: { id: string; title: string | null; content: string; color: string; is_pinned: boolean; updated_at: string; author: { id: string | null; name: string; initials: string } };
+  onUpdate: (id: string, data: { title?: string; content?: string; color?: string }) => void;
+  onDelete: (id: string) => void;
+  onPin: (id: string) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(note.title ?? '');
+  const [editContent, setEditContent] = useState(note.content);
+  const [showActions, setShowActions] = useState(false);
+  const colors = getNoteColor(note.color);
+  return (
+    <div onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)} style={{ background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 14, padding: '16px 18px', borderLeft: `4px solid ${colors.accent}`, position: 'relative', transition: 'box-shadow 0.2s', boxShadow: showActions ? '0 4px 16px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.04)', minHeight: 120 }}>
+      {note.is_pinned && !showActions && <div style={{ position: 'absolute', top: 10, right: 10, color: '#F59E0B' }}><Pin size={14} fill="#F59E0B" /></div>}
+      {showActions && !isEditing && (
+        <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
+          <button onClick={() => onPin(note.id)} title={note.is_pinned ? 'Désépingler' : 'Épingler'} style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: note.is_pinned ? '#F59E0B' : '#9CA3AF', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Pin size={13} /></button>
+          <button onClick={() => { setEditTitle(note.title ?? ''); setEditContent(note.content); setIsEditing(true); }} title="Modifier" style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Pencil size={13} /></button>
+          <button onClick={() => onDelete(note.id)} title="Supprimer" style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Trash2 size={13} /></button>
+        </div>
+      )}
+      {isEditing ? (<>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>{(['yellow', 'blue', 'green', 'pink', 'gray'] as const).map(c => (<button key={c} onClick={() => onUpdate(note.id, { color: c })} style={{ width: 16, height: 16, borderRadius: '50%', background: getNoteColor(c).accent, border: note.color === c ? '2px solid #111827' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />))}</div>
+        <input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Titre" style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 14, fontWeight: 600, outline: 'none', marginBottom: 6, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+        <textarea value={editContent} onChange={e => setEditContent(e.target.value)} autoFocus style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 13, resize: 'none', outline: 'none', lineHeight: 1.6, minHeight: 80, boxSizing: 'border-box', fontFamily: 'inherit', color: '#374151' }} />
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
+          <button onClick={() => setIsEditing(false)} style={{ padding: '4px 10px', fontSize: 12, background: 'white', border: '1px solid #E5E7EB', borderRadius: 6, cursor: 'pointer' }}>Annuler</button>
+          <button onClick={() => { onUpdate(note.id, { title: editTitle, content: editContent }); setIsEditing(false); }} style={{ padding: '4px 10px', fontSize: 12, background: colors.accent, color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Sauvegarder</button>
+        </div>
+      </>) : (<>
+        {note.title && <div style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 6, paddingRight: note.is_pinned ? 20 : 0 }}>{note.title}</div>}
+        <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{note.content}</div>
+      </>)}
+      <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#9CA3AF' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{note.author?.initials && <span style={{ background: colors.accent, color: 'white', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>{note.author.initials}</span>}{note.author?.name}</span>
+        <span>{formatNoteTime(note.updated_at)}</span>
+      </div>
+    </div>
   );
 }
 
