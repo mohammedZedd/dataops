@@ -1203,11 +1203,13 @@ export default function ClientsListPage() {
                   return (
                     <tr
                       key={c.id}
+                      onClick={() => c.client_id && navigate(`/clients/${c.client_id}`)}
                       style={{
                         borderBottom: idx < filtered.length - 1 ? '1px solid #F3F4F6' : 'none',
                         boxShadow: `inset 4px 0 0 0 ${accentColor}`,
                         transition: 'background 0.12s',
                         background: '#fff',
+                        cursor: c.client_id ? 'pointer' : 'default',
                       }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = '#F8FAFC'; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = '#fff'; }}
@@ -1245,7 +1247,7 @@ export default function ClientsListPage() {
                       </td>
 
                       {/* DOCUMENTS */}
-                      <td style={{ padding: '16px 12px' }}>
+                      <td style={{ padding: '16px 12px' }} onClick={e => e.stopPropagation()}>
                         {c.client_id ? (
                           <button
                             onClick={() => setDocsTarget(c)}
@@ -1281,17 +1283,8 @@ export default function ClientsListPage() {
                       </td>
 
                       {/* ACTIONS */}
-                      <td style={{ padding: '16px 12px' }}>
+                      <td style={{ padding: '16px 12px' }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <button
-                            onClick={() => openDetail(c, false)}
-                            title="Voir le détail"
-                            className="flex items-center justify-center text-gray-400
-                              hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-lg"
-                            style={{ height: 32, width: 32 }}
-                          >
-                            <Eye size={15} />
-                          </button>
                           <button
                             onClick={c.is_active ? () => openDetail(c, true) : undefined}
                             title={c.is_active ? 'Modifier' : undefined}
@@ -1319,6 +1312,9 @@ export default function ClientsListPage() {
                           >
                             <Trash2 size={15} />
                           </button>
+                          {c.client_id && (
+                            <ChevronRight size={15} color="#D1D5DB" />
+                          )}
                         </div>
                       </td>
                     </tr>
