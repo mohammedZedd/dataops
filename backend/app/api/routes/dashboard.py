@@ -9,7 +9,7 @@ from app.dependencies.auth import get_current_user
 from app.models.client import Client
 from app.models.document import Document
 from app.models.invoice import Invoice
-from app.models.user import User
+from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -69,4 +69,48 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
         },
         "recent_activity": activity,
         "invoices_to_validate": inv_list,
+    }
+
+
+@router.get("/client-stats")
+def get_client_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from fastapi import HTTPException
+    if current_user.role != UserRole.CLIENT:
+        raise HTTPException(status_code=403, detail="Réservé aux clients.")
+    client_id = current_user.client_id
+    if not client_id:
+        return {"documents": {"total": 0, "this_month": 0, "pending": 0}, "invoices": {"total": 0, "validated": 0, "to_review": 0, "rejected": 0}, "recent_documents": [], "unread_messages": 0}
+
+    now = datetime.utcnow()
+    som = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    base_docs = select(func.count(Document.id)).where(Document.client_id == client_id)
+    total_docs = db.scalar(base_docs) or 0
+    docs_month = db.scalar(base_docs.where(Document.uploaded_at >= som)) or 0
+    pending = db.scalar(base_docs.where(Document.status.in_(["uploaded", "processing"]))) or 0
+
+    base_inv = select(func.count(Invoice.id)).join(Document, Invoice.document_id == Document.id).where(Document.client_id == client_id)
+    total_inv = db.scalar(base_inv) or 0
+    validated = db.scalar(base_inv.where(Invoice.status == "validated")) or 0
+    to_review = db.scalar(base_inv.where(Invoice.status == "to_review")) or 0
+    rejected = db.scalar(base_inv.where(Invoice.status == "rejected")) or 0
+
+    recent = db.execute(select(Document).where(Document.client_id == client_id).order_by(Document.uploaded_at.desc()).limit(5)).scalars().all()
+    recent_list = []
+    for d in recent:
+        inv = db.scalars(select(Invoice).where(Invoice.document_id == d.id)).first()
+        recent_list.append({"id": d.id, "filename": d.file_name, "status": d.status, "created_at": d.uploaded_at.isoformat(), "invoice_status": inv.status if inv else None})
+
+    # Unread messages
+    from app.models.conversation import Conversation, Message
+    conv = db.scalars(select(Conversation).where(Conversation.client_user_id == current_user.id)).first()
+    unread = 0
+    if conv:
+        unread = sum(1 for _ in db.scalars(select(Message).where(Message.conversation_id == conv.id, Message.sender_id != current_user.id, Message.is_read == False)).all())
+
+    return {
+        "documents": {"total": total_docs, "this_month": docs_month, "pending": pending},
+        "invoices": {"total": total_inv, "validated": validated, "to_review": to_review, "rejected": rejected},
+        "recent_documents": recent_list,
+        "unread_messages": unread,
     }
