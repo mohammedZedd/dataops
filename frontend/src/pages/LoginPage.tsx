@@ -20,6 +20,7 @@ export default function LoginPage() {
     try {
       const { access_token, user } = await login(email, password);
       setAuth(access_token, user);
+      sessionStorage.setItem('just_logged_in', 'true');
       navigate('/');
     } catch (err) {
       if (err instanceof AxiosError && err.response) {

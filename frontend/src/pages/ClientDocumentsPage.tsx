@@ -4,6 +4,7 @@ import {
   CheckCircle, AlertCircle, Eye, X, Mic, MicOff, Square,
   Play, Pause,
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { getMyDocuments, uploadDocument, getPresignedDownloadUrl, getPresignedPreviewUrl, deleteDocument } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import type { ClientDocument } from '../types';
@@ -78,6 +79,22 @@ export default function ClientDocumentsPage() {
 
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // Welcome confetti on login
+  useEffect(() => {
+    const flag = sessionStorage.getItem('just_logged_in');
+    if (flag) {
+      sessionStorage.removeItem('just_logged_in');
+      setShowWelcome(true);
+      setTimeout(() => {
+        confetti({ particleCount: 80, spread: 60, origin: { x: 0.2, y: 0.6 }, colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'], ticks: 200 });
+        setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { x: 0.8, y: 0.6 }, colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'], ticks: 200 }), 200);
+        setTimeout(() => confetti({ particleCount: 120, spread: 100, origin: { x: 0.5, y: 0.3 }, colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899'], ticks: 300 }), 400);
+      }, 300);
+      setTimeout(() => setShowWelcome(false), 6000);
+    }
+  }, []);
 
   // Upload
   const [tab, setTab] = useState<UploadTab>('file');
@@ -313,6 +330,31 @@ export default function ClientDocumentsPage() {
               ) : null}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Welcome banner */}
+      <style>{`
+        @keyframes welcomeSlide { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes welcomeWave { 0%{transform:rotate(0)} 15%{transform:rotate(14deg)} 30%{transform:rotate(-8deg)} 45%{transform:rotate(14deg)} 60%{transform:rotate(-4deg)} 75%{transform:rotate(10deg)} 100%{transform:rotate(0)} }
+        @keyframes welcomeShrink { from { width: 100%; } to { width: 0%; } }
+      `}</style>
+      {showWelcome && (
+        <div style={{ position: 'relative', marginBottom: 24, padding: '20px 24px', background: 'linear-gradient(135deg, #EFF6FF, #F5F3FF)', border: '1px solid #BFDBFE', borderRadius: 16, overflow: 'hidden', animation: 'welcomeSlide 0.4s ease-out' }}>
+          <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(59,130,246,0.08)', pointerEvents: 'none' }} />
+          <button onClick={() => setShowWelcome(false)} style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(0,0,0,0.06)', border: 'none', borderRadius: '50%', width: 24, height: 24, cursor: 'pointer', fontSize: 12, color: '#6B7280', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ fontSize: 48, animation: 'welcomeWave 0.8s ease-in-out 2', transformOrigin: '70% 70%', display: 'inline-block', flexShrink: 0 }}>👋</span>
+            <div>
+              <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, background: 'linear-gradient(90deg, #2563EB, #7C3AED)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                Bon retour, {user?.first_name ?? ''} !
+              </h2>
+              <p style={{ margin: 0, fontSize: 14, color: '#3B82F6' }}>
+                {new Date().getHours() < 12 ? 'Belle journée productive en vue !' : new Date().getHours() < 18 ? 'Bonne après-midi !' : 'Bonsoir ! Tout est à jour.'}
+              </p>
+            </div>
+          </div>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, height: 3, background: 'linear-gradient(90deg, #3B82F6, #7C3AED)', borderRadius: '0 0 0 16px', animation: 'welcomeShrink 6s linear forwards' }} />
         </div>
       )}
 
