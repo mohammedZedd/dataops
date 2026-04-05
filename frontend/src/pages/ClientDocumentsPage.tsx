@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Upload, FileText, ImageIcon, FileSpreadsheet, Download, Trash2, CheckCircle, AlertCircle, Eye, X } from 'lucide-react';
+import {
+  Upload, FileText, ImageIcon, FileSpreadsheet, Download, Trash2,
+  CheckCircle, AlertCircle, Eye, X, Camera, Mic, MicOff, Square,
+  RotateCcw, Play, Pause,
+} from 'lucide-react';
 import { getMyDocuments, uploadDocument, getPresignedDownloadUrl, getPresignedPreviewUrl, deleteDocument } from '../api/documents';
 import type { ClientDocument } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const ACCEPTED = '.pdf,.jpg,.jpeg,.png,.xlsx,.xls';
+const ACCEPTED_FILE = '.pdf,.jpg,.jpeg,.png,.xlsx,.xls';
+const ACCEPTED_ALL = '.pdf,.jpg,.jpeg,.png,.xlsx,.xls,.webm,.mp4,.mp3,.ogg,.wav';
 const MAX_SIZE = 10 * 1024 * 1024;
+const MAX_RECORDING_SECONDS = 300; // 5 minutes
 
-function fileType(name: string): 'pdf' | 'image' | 'excel' | 'autre' {
+function fileType(name: string): 'pdf' | 'image' | 'excel' | 'audio' | 'autre' {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   if (ext === 'pdf') return 'pdf';
   if (['jpg', 'jpeg', 'png'].includes(ext)) return 'image';
   if (['xlsx', 'xls'].includes(ext)) return 'excel';
+  if (['webm', 'mp4', 'mp3', 'ogg', 'wav', 'mpeg'].includes(ext)) return 'audio';
   return 'autre';
 }
 
@@ -23,101 +30,115 @@ function formatSize(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
+function formatTimer(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
 function TypeBadge({ name }: { name: string }) {
   const t = fileType(name);
   const styles: Record<string, string> = {
-    pdf:   'bg-red-50 text-red-700 border border-red-200',
+    pdf: 'bg-red-50 text-red-700 border border-red-200',
     image: 'bg-purple-50 text-purple-700 border border-purple-200',
     excel: 'bg-green-50 text-green-700 border border-green-200',
+    audio: 'bg-violet-50 text-violet-700 border border-violet-200',
     autre: 'bg-gray-100 text-gray-600 border border-gray-200',
   };
-  const labels: Record<string, string> = { pdf: 'PDF', image: 'Image', excel: 'Excel', autre: 'Fichier' };
+  const labels: Record<string, string> = { pdf: 'PDF', image: 'Image', excel: 'Excel', audio: 'Audio', autre: 'Fichier' };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${styles[t]}`}>
-      {t === 'pdf'   && <FileText size={10} />}
+      {t === 'pdf' && <FileText size={10} />}
       {t === 'image' && <ImageIcon size={10} />}
       {t === 'excel' && <FileSpreadsheet size={10} />}
+      {t === 'audio' && <Mic size={10} />}
       {labels[t]}
     </span>
   );
 }
 
 function StatusBadge({ status }: { status: ClientDocument['status'] }) {
-  if (status === 'processed') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-green-50 text-green-700 border border-green-200">
-        Traité
-      </span>
-    );
-  }
-  if (status === 'processing') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-blue-50 text-blue-700 border border-blue-200">
-        En cours
-      </span>
-    );
-  }
-  if (status === 'error') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-red-50 text-red-700 border border-red-200">
-        Erreur
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-200">
-      En attente
-    </span>
-  );
+  const cfg: Record<string, { cls: string; label: string }> = {
+    processed: { cls: 'bg-green-50 text-green-700 border-green-200', label: 'Traité' },
+    processing: { cls: 'bg-blue-50 text-blue-700 border-blue-200', label: 'En cours' },
+    error: { cls: 'bg-red-50 text-red-700 border-red-200', label: 'Erreur' },
+  };
+  const c = cfg[status] ?? { cls: 'bg-amber-50 text-amber-700 border-amber-200', label: 'En attente' };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap border ${c.cls}`}>{c.label}</span>;
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+type UploadTab = 'file' | 'camera' | 'voice';
+
+const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|Android/i.test(navigator.userAgent);
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ClientDocumentsPage() {
-  const [documents,   setDocuments]   = useState<ClientDocument[]>([]);
-  const [loadError,   setLoadError]   = useState<string | null>(null);
+  const [documents, setDocuments] = useState<ClientDocument[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Upload state
-  const [dragging,    setDragging]    = useState(false);
-  const [selected,    setSelected]    = useState<File | null>(null);
-  const [progress,    setProgress]    = useState(0);
-  const [uploading,   setUploading]   = useState(false);
+  // Upload
+  const [tab, setTab] = useState<UploadTab>('file');
+  const [selected, setSelected] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [toast,       setToast]       = useState<'success' | 'deleted' | 'error' | null>(null);
+  const [toast, setToast] = useState<'success' | 'deleted' | 'error' | null>(null);
 
-  // Preview state
+  // Camera
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Voice
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Preview / delete modals
   const [previewDoc, setPreviewDoc] = useState<ClientDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-
-  // Delete modal state
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; doc: ClientDocument | null }>({ open: false, doc: null });
+  // Inline audio player in list
+  const [playingDocId, setPlayingDocId] = useState<string | null>(null);
+  const [playingUrl, setPlayingUrl] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocs = useCallback(() => {
     setLoadError(null);
-    getMyDocuments()
-      .then(setDocuments)
-      .catch(() => setLoadError('Impossible de charger vos documents.'));
+    getMyDocuments().then(setDocuments).catch(() => setLoadError('Impossible de charger vos documents.'));
   }, []);
 
   useEffect(() => { fetchDocs(); }, [fetchDocs]);
 
-  // Escape key closes modal
+  // Cleanup camera on unmount
   useEffect(() => {
-    if (!previewDoc) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') closePreview();
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [previewDoc]);
+    return () => { cameraStream?.getTracks().forEach(t => t.stop()); };
+  }, [cameraStream]);
 
-  function closePreview() {
-    setPreviewDoc(null);
-    setPreviewUrl(null);
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  function showToast(type: 'success' | 'deleted' | 'error') {
+    setToast(type);
+    setTimeout(() => setToast(null), 3000);
   }
+
+  function closePreview() { setPreviewDoc(null); setPreviewUrl(null); }
 
   async function loadPreview(doc: ClientDocument) {
     setDeleteModal({ open: false, doc: null });
@@ -126,23 +147,15 @@ export default function ClientDocumentsPage() {
     try {
       const url = await getPresignedPreviewUrl(doc.id);
       setPreviewUrl(url);
-    } catch {
-      closePreview();
-    } finally {
-      setPreviewLoading(false);
-    }
-  }
-
-  function showToast(type: 'success' | 'deleted' | 'error') {
-    setToast(type);
-    setTimeout(() => setToast(null), 3000);
+    } catch { closePreview(); }
+    finally { setPreviewLoading(false); }
   }
 
   function validate(file: File): string | null {
     const allowed = ['application/pdf', 'image/jpeg', 'image/png',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel'];
-    if (!allowed.includes(file.type)) return 'Type non autorisé. PDF, JPG, PNG, XLSX uniquement.';
+      'application/vnd.ms-excel', 'audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav'];
+    if (!allowed.includes(file.type)) return 'Type non autorisé.';
     if (file.size > MAX_SIZE) return 'Fichier trop volumineux (max 10 Mo).';
     return null;
   }
@@ -154,44 +167,19 @@ export default function ClientDocumentsPage() {
     setSelected(file);
   }
 
-  function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) pickFile(file);
-    e.target.value = '';
-  }
-
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) pickFile(file);
-  }
-
-  async function handleDownload(doc: ClientDocument) {
-    const url = await getPresignedDownloadUrl(doc.id);
-    window.open(url, '_blank');
-  }
-
-  async function handleDelete(doc: ClientDocument) {
-    try {
-      await deleteDocument(doc.id);
-      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
-      setDeleteModal({ open: false, doc: null });
-      showToast('deleted');
-    } catch {
-      showToast('error');
-    }
-  }
-
   async function handleUpload() {
-    if (!selected) return;
+    const file = selected || audioFile;
+    if (!file) return;
     setUploading(true);
     setProgress(0);
     setUploadError(null);
     try {
-      const doc = await uploadDocument(selected, setProgress);
-      setDocuments((prev) => [doc, ...prev]);
+      const doc = await uploadDocument(file, setProgress);
+      setDocuments(prev => [doc, ...prev]);
       setSelected(null);
+      setAudioFile(null);
+      setAudioUrl(null);
+      setPhotoPreview(null);
       setProgress(0);
       showToast('success');
     } catch {
@@ -202,51 +190,160 @@ export default function ClientDocumentsPage() {
     }
   }
 
+  // ─── Camera ────────────────────────────────────────────────────────────────
+
+  async function startCamera() {
+    setCameraError(null);
+    if (isMobile) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setCameraStream(stream);
+      setCameraActive(true);
+    } catch {
+      setCameraError("Accès à la caméra refusé. Utilisez l'option Fichier pour uploader une photo.");
+    }
+  }
+
+  function stopCamera() {
+    cameraStream?.getTracks().forEach(t => t.stop());
+    setCameraStream(null);
+    setCameraActive(false);
+  }
+
+  function capturePhoto() {
+    if (!videoRef.current) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    canvas.getContext('2d')!.drawImage(videoRef.current, 0, 0);
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const file = new File([blob], `photo_facture_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      setSelected(file);
+      stopCamera();
+      setPhotoPreview(URL.createObjectURL(blob));
+    }, 'image/jpeg', 0.9);
+  }
+
+  function handleCameraFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelected(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    }
+    e.target.value = '';
+  }
+
+  // ─── Voice ─────────────────────────────────────────────────────────────────
+
+  async function startRecording() {
+    setVoiceError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      mr.ondataavailable = e => chunks.push(e.data);
+      mr.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const file = new File([blob], `note_vocale_${Date.now()}.webm`, { type: 'audio/webm' });
+        setAudioFile(file);
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          if (prev + 1 >= MAX_RECORDING_SECONDS) { stopRecording(); return prev; }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch {
+      setVoiceError('Accès au microphone refusé. Vérifiez les permissions de votre navigateur.');
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }
+
+  function discardRecording() {
+    setAudioFile(null);
+    setAudioUrl(null);
+    setRecordingTime(0);
+  }
+
+  // ─── Inline audio player for list ──────────────────────────────────────────
+
+  async function togglePlayDoc(doc: ClientDocument) {
+    if (playingDocId === doc.id) {
+      setPlayingDocId(null);
+      setPlayingUrl(null);
+      return;
+    }
+    try {
+      const url = await getPresignedDownloadUrl(doc.id);
+      setPlayingDocId(doc.id);
+      setPlayingUrl(url);
+    } catch { /* ignore */ }
+  }
+
+  // ─── Misc ──────────────────────────────────────────────────────────────────
+
+  async function handleDownload(doc: ClientDocument) {
+    const url = await getPresignedDownloadUrl(doc.id);
+    window.open(url, '_blank');
+  }
+
+  async function handleDelete(doc: ClientDocument) {
+    try {
+      await deleteDocument(doc.id);
+      setDocuments(prev => prev.filter(d => d.id !== doc.id));
+      setDeleteModal({ open: false, doc: null });
+      showToast('deleted');
+    } catch { showToast('error'); }
+  }
+
   const canPreview = (name: string) => ['pdf', 'image'].includes(fileType(name));
+  const hasFileToUpload = !!selected || !!audioFile;
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
 
       {/* Toast */}
-      <div className={`fixed top-16 right-4 z-50 flex items-center gap-2.5 bg-white border rounded-xl
-        shadow-lg px-4 py-3 transition-all duration-300
+      <div className={`fixed top-16 right-4 z-50 flex items-center gap-2.5 bg-white border rounded-xl shadow-lg px-4 py-3 transition-all duration-300
         ${toast === 'error' ? 'border-red-200' : 'border-green-200'}
-        ${toast ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'}`}
-      >
-        {toast === 'success' && <><CheckCircle size={18} className="text-green-500 flex-shrink-0" /><span className="text-sm font-medium text-gray-800">Document envoyé avec succès</span></>}
-        {toast === 'deleted' && <><CheckCircle size={18} className="text-green-500 flex-shrink-0" /><span className="text-sm font-medium text-gray-800">Fichier supprimé</span></>}
-        {toast === 'error'   && <><AlertCircle size={18} className="text-red-500 flex-shrink-0" /><span className="text-sm font-medium text-gray-800">Une erreur est survenue</span></>}
+        ${toast ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'}`}>
+        {toast === 'success' && <><CheckCircle size={18} className="text-green-500" /><span className="text-sm font-medium text-gray-800">Document envoyé avec succès</span></>}
+        {toast === 'deleted' && <><CheckCircle size={18} className="text-green-500" /><span className="text-sm font-medium text-gray-800">Fichier supprimé</span></>}
+        {toast === 'error' && <><AlertCircle size={18} className="text-red-500" /><span className="text-sm font-medium text-gray-800">Une erreur est survenue</span></>}
       </div>
 
-      {/* Delete confirmation modal */}
+      {/* Delete modal */}
       {deleteModal.open && deleteModal.doc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
             <div className="flex flex-col items-center gap-3 mb-5">
-              <div className="h-12 w-12 rounded-full bg-red-50 flex items-center justify-center">
-                <Trash2 size={24} className="text-red-500" />
-              </div>
-              <div className="text-center">
-                <p className="font-semibold text-gray-900">Supprimer ce fichier ?</p>
-                <p className="text-sm text-gray-500 mt-0.5">Cette action est irréversible.</p>
-              </div>
-              <p className="text-sm font-medium text-gray-700 bg-gray-50 rounded px-3 py-2 w-full text-center truncate">
-                {deleteModal.doc.file_name}
-              </p>
+              <div className="h-12 w-12 rounded-full bg-red-50 flex items-center justify-center"><Trash2 size={24} className="text-red-500" /></div>
+              <p className="font-semibold text-gray-900">Supprimer ce fichier ?</p>
+              <p className="text-sm text-gray-500">Cette action est irréversible.</p>
+              <p className="text-sm font-medium text-gray-700 bg-gray-50 rounded px-3 py-2 w-full text-center truncate">{deleteModal.doc.file_name}</p>
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => setDeleteModal({ open: false, doc: null })}
-                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={() => handleDelete(deleteModal.doc!)}
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-              >
-                Supprimer
-              </button>
+              <button onClick={() => setDeleteModal({ open: false, doc: null })} className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Annuler</button>
+              <button onClick={() => handleDelete(deleteModal.doc!)} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg">Supprimer</button>
             </div>
           </div>
         </div>
@@ -254,53 +351,24 @@ export default function ClientDocumentsPage() {
 
       {/* Preview modal */}
       {previewDoc && (
-        <div
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
-          onClick={closePreview}
-        >
-          <div
-            className="bg-white rounded-xl overflow-hidden max-w-4xl w-full max-h-[90vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal header */}
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={closePreview}>
+          <div className="bg-white rounded-xl overflow-hidden max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
               <p className="text-sm font-medium text-gray-800 truncate mr-4">{previewDoc.file_name}</p>
               <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={() => handleDownload(previewDoc)}
-                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Télécharger"
-                >
-                  <Download size={16} />
-                </button>
-                <button
-                  onClick={closePreview}
-                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Fermer"
-                >
-                  <X size={16} />
-                </button>
+                <button onClick={() => handleDownload(previewDoc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Télécharger"><Download size={16} /></button>
+                <button onClick={closePreview} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="Fermer"><X size={16} /></button>
               </div>
             </div>
-
-            {/* Modal body */}
             <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-50 min-h-0">
               {previewLoading ? (
                 <div className="h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
               ) : previewUrl ? (
-                fileType(previewDoc.file_name) === 'pdf' ? (
-                  <iframe
-                    src={previewUrl}
-                    className="w-full h-[80vh]"
-                    title={previewDoc.file_name}
-                  />
-                ) : (
-                  <img
-                    src={previewUrl}
-                    alt={previewDoc.file_name}
-                    className="max-w-full max-h-[80vh] object-contain"
-                  />
-                )
+                fileType(previewDoc.file_name) === 'pdf'
+                  ? <iframe src={previewUrl} className="w-full h-[80vh]" title={previewDoc.file_name} />
+                  : fileType(previewDoc.file_name) === 'audio'
+                    ? <audio controls src={previewUrl} className="my-12" />
+                    : <img src={previewUrl} alt={previewDoc.file_name} className="max-w-full max-h-[80vh] object-contain" />
               ) : null}
             </div>
           </div>
@@ -310,60 +378,166 @@ export default function ClientDocumentsPage() {
       {/* Header */}
       <div className="pb-5 border-b border-gray-200">
         <h1 className="text-xl font-semibold text-gray-900">Mes documents</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Déposez vos fichiers pour les transmettre à votre cabinet comptable.
-        </p>
+        <p className="text-sm text-gray-500 mt-0.5">Déposez vos fichiers pour les transmettre à votre cabinet comptable.</p>
       </div>
 
-      {/* Upload zone */}
+      {/* ═══ Upload zone — 3 tabs ═══ */}
       <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
         <p className="text-sm font-medium text-gray-700">Ajouter un document</p>
 
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          onClick={() => !selected && inputRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl px-6 py-10 flex flex-col items-center gap-3
-            transition-colors cursor-pointer
-            ${dragging
-              ? 'border-blue-400 bg-blue-50'
-              : selected
-                ? 'border-green-300 bg-green-50 cursor-default'
-                : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-            }`}
-        >
-          <input ref={inputRef} type="file" accept={ACCEPTED} className="hidden" onChange={onInputChange} />
-
-          {selected ? (
-            <>
-              <FileText size={32} className="text-green-500" />
-              <div className="text-center">
-                <p className="text-sm font-medium text-gray-800">{selected.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{formatSize(selected.size)}</p>
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); setSelected(null); setUploadError(null); }}
-                className="text-xs text-gray-400 hover:text-gray-600 underline"
-              >
-                Changer de fichier
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
-                <Upload size={22} className="text-gray-400" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium text-gray-700">
-                  Glissez un fichier ici ou <span className="text-blue-600">parcourir</span>
-                </p>
-                <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG, XLSX — max 10 Mo</p>
-              </div>
-            </>
-          )}
+        {/* Tab buttons */}
+        <div className="flex gap-3">
+          {([
+            { id: 'file' as UploadTab, icon: <Upload size={20} />, label: 'Fichier' },
+            { id: 'camera' as UploadTab, icon: <Camera size={20} />, label: 'Photo' },
+            { id: 'voice' as UploadTab, icon: <Mic size={20} />, label: 'Note vocale' },
+          ]).map(t => (
+            <button
+              key={t.id}
+              onClick={() => { setTab(t.id); setUploadError(null); }}
+              className="flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-all"
+              style={{
+                borderColor: tab === t.id ? '#3B82F6' : '#E5E7EB',
+                background: tab === t.id ? '#EFF6FF' : '#fff',
+                color: tab === t.id ? '#2563EB' : '#6B7280',
+              }}
+            >
+              {t.icon}
+              <span className="text-[13px] font-medium">{t.label}</span>
+            </button>
+          ))}
         </div>
 
+        {/* ─── File tab ────────────────────────────────────────────────────── */}
+        {tab === 'file' && (
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) pickFile(f); }}
+            onClick={() => !selected && inputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl px-6 py-10 flex flex-col items-center gap-3 transition-colors cursor-pointer
+              ${dragging ? 'border-blue-400 bg-blue-50' : selected ? 'border-green-300 bg-green-50 cursor-default' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'}`}
+          >
+            <input ref={inputRef} type="file" accept={ACCEPTED_FILE} className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) pickFile(f); e.target.value = ''; }} />
+            {selected ? (
+              <>
+                <FileText size={32} className="text-green-500" />
+                <p className="text-sm font-medium text-gray-800">{selected.name}</p>
+                <p className="text-xs text-gray-500">{formatSize(selected.size)}</p>
+                <button onClick={e => { e.stopPropagation(); setSelected(null); setPhotoPreview(null); }} className="text-xs text-gray-400 hover:text-gray-600 underline">Changer</button>
+              </>
+            ) : (
+              <>
+                <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center"><Upload size={22} className="text-gray-400" /></div>
+                <p className="text-sm font-medium text-gray-700">Glissez un fichier ici ou <span className="text-blue-600">parcourir</span></p>
+                <p className="text-xs text-gray-400">PDF, JPG, PNG, XLSX — max 10 Mo</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ─── Camera tab ──────────────────────────────────────────────────── */}
+        {tab === 'camera' && (
+          <div className="space-y-3">
+            {/* Hidden native file input for mobile */}
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCameraFileInput} />
+
+            {cameraError && (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[12px] text-amber-700">{cameraError}</p>
+              </div>
+            )}
+
+            {photoPreview ? (
+              <div className="flex flex-col items-center gap-3">
+                <img src={photoPreview} alt="Photo capturée" className="max-h-64 rounded-lg border border-gray-200" />
+                <p className="text-sm text-green-600 font-medium">Photo capturée — prête à envoyer</p>
+                <button onClick={() => { setSelected(null); setPhotoPreview(null); }} className="text-xs text-gray-500 hover:text-gray-700 underline">Reprendre</button>
+              </div>
+            ) : cameraActive ? (
+              <div className="relative rounded-xl overflow-hidden bg-black">
+                <video ref={videoRef} autoPlay playsInline muted className="w-full" style={{ maxHeight: 360 }} />
+                <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-4 py-4 bg-gradient-to-t from-black/60">
+                  <button onClick={stopCamera} className="px-3 py-1.5 text-sm text-white/80 hover:text-white">Annuler</button>
+                  <button onClick={capturePhoto} className="h-14 w-14 rounded-full bg-white border-4 border-white/30 shadow-lg hover:scale-105 transition-transform" />
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={startCamera}
+                className="w-full border-2 border-dashed border-gray-300 rounded-xl px-6 py-10 flex flex-col items-center gap-3 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
+              >
+                <div className="h-14 w-14 rounded-full bg-blue-50 flex items-center justify-center"><Camera size={28} className="text-blue-500" /></div>
+                <p className="text-sm font-medium text-gray-700">{isMobile ? 'Ouvrir la caméra' : 'Activer la caméra'}</p>
+                <p className="text-xs text-gray-400">{isMobile ? 'Prenez une photo de votre document' : 'Capturez directement depuis votre webcam'}</p>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ─── Voice tab ───────────────────────────────────────────────────── */}
+        {tab === 'voice' && (
+          <div className="space-y-3">
+            {voiceError && (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <MicOff size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[12px] text-amber-700">{voiceError}</p>
+              </div>
+            )}
+
+            {audioUrl && audioFile ? (
+              /* RECORDED state */
+              <div className="border border-gray-200 rounded-xl p-5 flex flex-col items-center gap-3">
+                <div className="flex items-center gap-3 w-full">
+                  <button
+                    onClick={() => { if (audioRef.current) { audioPlaying ? audioRef.current.pause() : audioRef.current.play(); setAudioPlaying(!audioPlaying); } }}
+                    className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center text-violet-600 hover:bg-violet-200 transition-colors"
+                  >
+                    {audioPlaying ? <Pause size={18} /> : <Play size={18} />}
+                  </button>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-800">{audioFile.name}</p>
+                    <p className="text-xs text-gray-500">Durée : {formatTimer(recordingTime)} — {formatSize(audioFile.size)}</p>
+                  </div>
+                  <audio ref={audioRef} src={audioUrl} onEnded={() => setAudioPlaying(false)} />
+                </div>
+                <button onClick={discardRecording} className="text-xs text-gray-400 hover:text-red-500 underline">Supprimer et réenregistrer</button>
+              </div>
+            ) : isRecording ? (
+              /* RECORDING state */
+              <div className="border-2 border-red-200 bg-red-50 rounded-xl p-6 flex flex-col items-center gap-4">
+                <div className="relative">
+                  <div className="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
+                    <Mic size={28} className="text-red-500" />
+                  </div>
+                </div>
+                <p className="text-2xl font-mono font-bold text-red-700">{formatTimer(recordingTime)}</p>
+                {recordingTime >= MAX_RECORDING_SECONDS - 60 && (
+                  <p className="text-xs text-red-500 font-medium">{MAX_RECORDING_SECONDS - recordingTime}s restantes</p>
+                )}
+                <button
+                  onClick={stopRecording}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  <Square size={14} /> Arrêter
+                </button>
+              </div>
+            ) : (
+              /* IDLE state */
+              <button
+                onClick={startRecording}
+                className="w-full border-2 border-dashed border-gray-300 rounded-xl px-6 py-10 flex flex-col items-center gap-3 hover:border-violet-400 hover:bg-violet-50 transition-colors cursor-pointer"
+              >
+                <div className="h-14 w-14 rounded-full bg-violet-50 flex items-center justify-center"><Mic size={28} className="text-violet-500" /></div>
+                <p className="text-sm font-medium text-gray-700">Appuyez pour enregistrer</p>
+                <p className="text-xs text-gray-400">Note vocale — max 5 minutes</p>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Progress bar */}
         {uploading && (
           <div className="space-y-1">
             <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -373,32 +547,25 @@ export default function ClientDocumentsPage() {
           </div>
         )}
 
-        {uploadError && (
-          <p className="text-xs text-red-600 flex items-center gap-1.5">
-            <AlertCircle size={13} /> {uploadError}
-          </p>
-        )}
+        {uploadError && <p className="text-xs text-red-600 flex items-center gap-1.5"><AlertCircle size={13} /> {uploadError}</p>}
 
+        {/* Upload button */}
         <button
           onClick={handleUpload}
-          disabled={!selected || uploading}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700
-            text-white text-sm font-medium rounded-lg transition-colors
-            disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={!hasFileToUpload || uploading}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Upload size={15} />
           {uploading ? 'Envoi en cours…' : 'Envoyer'}
         </button>
       </div>
 
-      {/* Documents list */}
+      {/* ═══ Documents list ═══ */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100">
           <p className="text-sm font-medium text-gray-700">
             Fichiers envoyés
-            {documents.length > 0 && (
-              <span className="ml-2 text-xs text-gray-400 font-normal">({documents.length})</span>
-            )}
+            {documents.length > 0 && <span className="ml-2 text-xs text-gray-400 font-normal">({documents.length})</span>}
           </p>
         </div>
 
@@ -413,54 +580,52 @@ export default function ClientDocumentsPage() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Fichier</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Type</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Taille</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Date</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Statut</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Fichier</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Type</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Taille</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Date</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Statut</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {documents.map((doc, idx) => (
-                <tr
-                  key={doc.id}
-                  className={`hover:bg-gray-50 transition-colors ${idx < documents.length - 1 ? 'border-b border-gray-100' : ''}`}
-                >
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate">{doc.file_name}</td>
-                  <td className="px-4 py-3"><TypeBadge name={doc.file_name} /></td>
-                  <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatSize(doc.file_size)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                    {new Date(doc.uploaded_at).toLocaleDateString('fr-FR')}
-                  </td>
-                  <td className="px-4 py-3"><StatusBadge status={doc.status} /></td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => loadPreview(doc)}
-                        disabled={!canPreview(doc.file_name)}
-                        className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        title="Prévisualiser"
-                      >
-                        <Eye size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDownload(doc)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Télécharger"
-                      >
-                        <Download size={14} />
-                      </button>
-                      <button
-                        onClick={() => { closePreview(); setDeleteModal({ open: true, doc }); }}
-                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Supprimer"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <>
+                  <tr key={doc.id} className={`hover:bg-gray-50 transition-colors ${idx < documents.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate">{doc.file_name}</td>
+                    <td className="px-4 py-3"><TypeBadge name={doc.file_name} /></td>
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatSize(doc.file_size)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{new Date(doc.uploaded_at).toLocaleDateString('fr-FR')}</td>
+                    <td className="px-4 py-3"><StatusBadge status={doc.status} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {fileType(doc.file_name) === 'audio' ? (
+                          <button onClick={() => togglePlayDoc(doc)} className="p-1.5 text-gray-400 hover:text-violet-500 hover:bg-violet-50 rounded-lg transition-colors" title="Écouter">
+                            {playingDocId === doc.id ? <Pause size={14} /> : <Play size={14} />}
+                          </button>
+                        ) : (
+                          <button onClick={() => loadPreview(doc)} disabled={!canPreview(doc.file_name)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title="Prévisualiser">
+                            <Eye size={14} />
+                          </button>
+                        )}
+                        <button onClick={() => handleDownload(doc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Télécharger">
+                          <Download size={14} />
+                        </button>
+                        <button onClick={() => { closePreview(); setDeleteModal({ open: true, doc }); }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Supprimer">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {/* Inline audio player */}
+                  {playingDocId === doc.id && playingUrl && (
+                    <tr key={`${doc.id}-player`} className="border-b border-gray-100">
+                      <td colSpan={6} className="px-4 py-2 bg-violet-50">
+                        <audio controls autoPlay src={playingUrl} className="w-full h-8" onEnded={() => setPlayingDocId(null)} />
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>

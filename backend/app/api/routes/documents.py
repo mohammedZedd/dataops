@@ -27,6 +27,11 @@ _ALLOWED_TYPES = {
     "image/png",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel",
+    "audio/webm",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
 }
 _MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 

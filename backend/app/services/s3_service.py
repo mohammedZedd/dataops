@@ -15,7 +15,7 @@ from app.config import settings
 
 logger = logging.getLogger("s3")
 
-_VALID_EXTENSIONS = (".pdf", ".jpg", ".jpeg", ".png", ".xlsx", ".xls")
+_VALID_EXTENSIONS = (".pdf", ".jpg", ".jpeg", ".png", ".xlsx", ".xls", ".webm", ".mp4", ".mp3", ".ogg", ".wav")
 
 
 def clean_s3_key(s3_key: str) -> str:
