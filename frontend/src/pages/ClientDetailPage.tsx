@@ -4,7 +4,7 @@ import {
   ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Calendar,
   User, Mail, Phone, Building2, Briefcase, FileText, ImageIcon,
   FileSpreadsheet, File as FileIcon, FolderOpen, Download,
-  Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X, StickyNote, Pin, Trash2, Plus,
+  Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X, Trash2, Plus,
 } from 'lucide-react';
 import apiClient from '../api/axios';
 import { getClient, getClientUsers, updateClientUser, revokeClientAccess, restoreClientAccess } from '../api/clients';
@@ -113,14 +113,17 @@ export default function ClientDetailPage() {
   const [uploading, setUploading] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  // Notes
-  interface NoteAuthor { id: string | null; name: string; initials: string }
-  interface Note { id: string; title: string | null; content: string; color: string; is_pinned: boolean; created_at: string; updated_at: string; author: NoteAuthor }
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [showNewNoteForm, setShowNewNoteForm] = useState(false);
-  const [newNoteTitle, setNewNoteTitle] = useState('');
-  const [newNoteContent, setNewNoteContent] = useState('');
-  const [newNoteColor, setNewNoteColor] = useState('yellow');
+  // Tasks
+  interface TaskAssignee { id: string; name: string; initials: string; role: string }
+  interface Task { id: string; title: string; description: string | null; task_type: string; due_date: string | null; due_year: number; due_month: number; status: string; progress: number; priority: string; assignee: TaskAssignee | null; created_by: TaskAssignee | null; created_at: string; completed_at: string | null }
+  interface MonthData { month: number; month_name: string; tasks: Task[]; total: number; done: number; progress: number }
+  interface YearData { year: number; months: MonthData[]; total: number; done: number; progress: number }
+  const [groupedTasks, setGroupedTasks] = useState<YearData[]>([]);
+  const [accountants, setAccountants] = useState<TaskAssignee[]>([]);
+  const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+  const defaultNewTask = { title: '', description: '', task_type: '', due_date: '', priority: 'normal', assigned_to_id: '' };
+  const [newTask, setNewTask] = useState(defaultNewTask);
+  const taskCount = groupedTasks.reduce((s, y) => s + y.total, 0);
 
   const fetchData = useCallback(async () => {
     if (!clientId) { setError('ID manquant.'); setLoading(false); return; }
@@ -230,46 +233,36 @@ export default function ClientDetailPage() {
     try { const url = await getPresignedDownloadUrl(docId); setPlayingId(docId); setPlayingUrl(url); } catch { /* */ }
   }
 
-  // ─── Notes ─────────────────────────────────────────────────────────────────
+  // ─── Tasks ─────────────────────────────────────────────────────────────────
 
-  const fetchNotes = useCallback(async () => {
+  const fetchTasks = useCallback(async () => {
     if (!clientId) return;
-    try { const { data } = await apiClient.get(`/clients/${clientId}/notes`); setNotes(data); } catch { /* */ }
+    try {
+      const { data } = await apiClient.get(`/clients/${clientId}/tasks`);
+      setGroupedTasks(data.grouped || []);
+      setAccountants(data.accountants || []);
+    } catch { /* */ }
   }, [clientId]);
 
-  useEffect(() => { if (activeTab === 'notes') fetchNotes(); }, [activeTab, fetchNotes]);
+  useEffect(() => { if (activeTab === 'notes') fetchTasks(); }, [activeTab, fetchTasks]);
 
-  async function handleCreateNote() {
-    if (!newNoteContent.trim() || !clientId) return;
+  async function handleCreateTask() {
+    if (!newTask.title.trim() || !newTask.task_type || !clientId) return;
     try {
-      const { data } = await apiClient.post(`/clients/${clientId}/notes`, { title: newNoteTitle, content: newNoteContent, color: newNoteColor });
-      setNotes(prev => [data, ...prev]);
-      setShowNewNoteForm(false); setNewNoteTitle(''); setNewNoteContent(''); setNewNoteColor('yellow');
+      await apiClient.post(`/clients/${clientId}/tasks`, { ...newTask, assigned_to_id: newTask.assigned_to_id || null });
+      setShowNewTaskForm(false); setNewTask(defaultNewTask);
+      fetchTasks();
     } catch { /* */ }
   }
 
-  async function handleUpdateNote(noteId: string, updates: { title?: string; content?: string; color?: string }) {
+  async function handleUpdateTask(taskId: string, updates: Record<string, unknown>) {
     if (!clientId) return;
-    try {
-      const { data } = await apiClient.patch(`/clients/${clientId}/notes/${noteId}`, updates);
-      setNotes(prev => prev.map(n => n.id === noteId ? { ...n, ...data } : n));
-    } catch { /* */ }
+    try { await apiClient.patch(`/clients/${clientId}/tasks/${taskId}`, updates); fetchTasks(); } catch { /* */ }
   }
 
-  async function handleDeleteNote(noteId: string) {
-    if (!confirm('Supprimer cette note ?')) return;
-    try {
-      await apiClient.delete(`/clients/${clientId}/notes/${noteId}`);
-      setNotes(prev => prev.filter(n => n.id !== noteId));
-    } catch { /* */ }
-  }
-
-  async function handleTogglePin(noteId: string) {
-    if (!clientId) return;
-    try {
-      const { data } = await apiClient.patch(`/clients/${clientId}/notes/${noteId}/pin`);
-      setNotes(prev => prev.map(n => n.id === noteId ? { ...n, is_pinned: data.is_pinned } : n).sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned)));
-    } catch { /* */ }
+  async function handleDeleteTask(taskId: string) {
+    if (!confirm('Supprimer cette tâche ?')) return;
+    try { await apiClient.delete(`/clients/${clientId}/tasks/${taskId}`); fetchTasks(); } catch { /* */ }
   }
 
   // ─── Loading / Error ───────────────────────────────────────────────────────
@@ -329,7 +322,7 @@ export default function ClientDetailPage() {
         {[
           { key: 'details', label: 'Détails du client', icon: <User size={16} /> },
           { key: 'documents', label: 'Documents', icon: <FileText size={16} /> },
-          { key: 'notes', label: 'Notes', icon: <StickyNote size={16} /> },
+          { key: 'notes', label: 'Tâches', icon: <ClipboardList size={16} /> },
         ].map((tab, i) => (
           <div key={tab.key} style={{ display: 'contents' }}>
           {i > 0 && <div style={{ width: 1, height: 20, background: '#E5E7EB', margin: '0 4px', flexShrink: 0 }} />}
@@ -347,9 +340,9 @@ export default function ClientDetailPage() {
                 {docs.length}
               </span>
             )}
-            {tab.key === 'notes' && notes.length > 0 && (
-              <span style={{ fontSize: 12, padding: '1px 8px', borderRadius: 20, background: '#FFF7ED', color: '#C2410C', fontWeight: 600, marginLeft: 2 }}>
-                {notes.length}
+            {tab.key === 'notes' && taskCount > 0 && (
+              <span style={{ fontSize: 12, padding: '1px 8px', borderRadius: 20, background: '#EFF6FF', color: '#3B82F6', fontWeight: 600, marginLeft: 2 }}>
+                {taskCount}
               </span>
             )}
           </button>
@@ -644,51 +637,80 @@ export default function ClientDetailPage() {
         </div>
       )}
 
-      {/* ═══ TAB: Notes ═══ */}
+      {/* ═══ TAB: Tâches ═══ */}
       {activeTab === 'notes' && (
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 0 32px' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 0 32px' }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#111827' }}>Notes</h2>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7280' }}>Notes privées sur {client.name} — visibles uniquement par votre cabinet</p>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}><ClipboardList size={22} /> Tâches & Suivi</h2>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7280' }}>Gérez les tâches liées à {client.name}</p>
             </div>
-            <button onClick={() => setShowNewNoteForm(true)} style={{ padding: '10px 20px', background: '#F59E0B', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={16} /> Nouvelle note
+            <button onClick={() => setShowNewTaskForm(true)} style={{ padding: '10px 20px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={16} /> Nouvelle tâche
             </button>
           </div>
 
-          {/* New note form */}
-          {showNewNoteForm && (
-            <div style={{ background: getNoteColor(newNoteColor).bg, border: `1px solid ${getNoteColor(newNoteColor).border}`, borderRadius: 14, padding: '16px 20px', marginBottom: 20, borderLeft: `4px solid ${getNoteColor(newNoteColor).accent}` }}>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                {(['yellow', 'blue', 'green', 'pink', 'gray'] as const).map(c => (
-                  <button key={c} onClick={() => setNewNoteColor(c)} style={{ width: 20, height: 20, borderRadius: '50%', background: getNoteColor(c).accent, border: newNoteColor === c ? '2px solid #111827' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
-                ))}
+          {/* New task form */}
+          {showNewTaskForm && (
+            <div style={{ background: 'white', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 24px', marginBottom: 24, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+              <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>Nouvelle tâche</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Titre *</label>
+                  <input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Ex: Envoyer le bilan 2026" style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Type de tâche *</label>
+                  <select value={newTask.task_type} onChange={e => setNewTask({ ...newTask, task_type: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}>
+                    <option value="">Sélectionner...</option>
+                    {TASK_TYPES.map(t => <option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Priorité</label>
+                  <select value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}>
+                    <option value="low">Basse</option>
+                    <option value="normal">Normale</option>
+                    <option value="high">Haute</option>
+                    <option value="urgent">Urgente</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Échéance</label>
+                  <input type="date" value={newTask.due_date} onChange={e => setNewTask({ ...newTask, due_date: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Assigné à</label>
+                  <select value={newTask.assigned_to_id} onChange={e => setNewTask({ ...newTask, assigned_to_id: e.target.value })} style={{ width: '100%', height: 40, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 14, outline: 'none', background: 'white', cursor: 'pointer' }}>
+                    <option value="">Non assigné</option>
+                    {accountants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: 4 }}>Description (optionnel)</label>
+                  <textarea value={newTask.description} onChange={e => setNewTask({ ...newTask, description: e.target.value })} placeholder="Détails supplémentaires..." rows={2} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 12px', fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                </div>
               </div>
-              <input value={newNoteTitle} onChange={e => setNewNoteTitle(e.target.value)} placeholder="Titre (optionnel)" style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 15, fontWeight: 600, color: '#111827', outline: 'none', marginBottom: 8, boxSizing: 'border-box' }} />
-              <textarea value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)} placeholder="Écrivez votre note ici..." autoFocus rows={4} style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 14, color: '#374151', outline: 'none', resize: 'none', lineHeight: 1.6, boxSizing: 'border-box', fontFamily: 'inherit' }} />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                <button onClick={() => { setShowNewNoteForm(false); setNewNoteTitle(''); setNewNoteContent(''); setNewNoteColor('yellow'); }} style={{ padding: '7px 14px', background: 'white', border: '1px solid #E5E7EB', color: '#6B7280', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
-                <button onClick={handleCreateNote} disabled={!newNoteContent.trim()} style={{ padding: '7px 16px', background: newNoteContent.trim() ? '#F59E0B' : '#E5E7EB', color: newNoteContent.trim() ? 'white' : '#9CA3AF', border: 'none', borderRadius: 8, cursor: newNoteContent.trim() ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 13 }}>Enregistrer</button>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button onClick={() => { setShowNewTaskForm(false); setNewTask(defaultNewTask); }} style={{ padding: '9px 18px', background: 'white', border: '1px solid #E5E7EB', color: '#374151', borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontSize: 13 }}>Annuler</button>
+                <button onClick={handleCreateTask} disabled={!newTask.title.trim() || !newTask.task_type} style={{ padding: '9px 20px', background: newTask.title.trim() && newTask.task_type ? '#3B82F6' : '#E5E7EB', color: newTask.title.trim() && newTask.task_type ? 'white' : '#9CA3AF', border: 'none', borderRadius: 8, cursor: newTask.title.trim() && newTask.task_type ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 13 }}>Créer la tâche</button>
               </div>
             </div>
           )}
 
-          {/* Notes grid */}
-          {notes.length === 0 && !showNewNoteForm ? (
+          {/* Tree view: Year → Month → Tasks */}
+          {groupedTasks.length === 0 && !showNewTaskForm ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
-              <div style={{ height: 56, width: 56, borderRadius: '50%', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><StickyNote size={26} color="#F59E0B" /></div>
-              <div style={{ fontWeight: 500, color: '#374151', fontSize: 16 }}>Aucune note pour ce client</div>
-              <div style={{ fontSize: 13, marginTop: 6 }}>Ajoutez des notes, rappels ou observations sur ce client</div>
-              <button onClick={() => setShowNewNoteForm(true)} style={{ marginTop: 16, padding: '10px 24px', background: '#F59E0B', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Créer la première note</button>
+              <div style={{ height: 56, width: 56, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><ClipboardList size={26} color="#3B82F6" /></div>
+              <div style={{ fontWeight: 500, color: '#374151', fontSize: 16 }}>Aucune tâche pour ce client</div>
+              <div style={{ fontSize: 13, marginTop: 6 }}>Créez des tâches pour suivre votre travail</div>
+              <button onClick={() => setShowNewTaskForm(true)} style={{ marginTop: 16, padding: '10px 24px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Créer la première tâche</button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {notes.map(note => (
-                <NoteCard key={note.id} note={note} onUpdate={handleUpdateNote} onDelete={handleDeleteNote} onPin={handleTogglePin} />
-              ))}
-            </div>
+            groupedTasks.map(yearGroup => (
+              <YearGroup key={yearGroup.year} yearGroup={yearGroup} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} accountants={accountants} />
+            ))
           )}
         </div>
       )}
@@ -775,92 +797,189 @@ function IconBtn({ onClick, title, disabled, active, color, bgHover, children }:
   );
 }
 
-// ─── Note helpers ───────���────────────────────────────────────────────────────
+// ─── Task types config ──────────────────────────────────────────────────────
 
-function getNoteColor(color: string) {
-  const colors: Record<string, { bg: string; border: string; accent: string }> = {
-    yellow: { bg: '#FFFBEB', border: '#FDE68A', accent: '#F59E0B' },
-    blue:   { bg: '#EFF6FF', border: '#BFDBFE', accent: '#3B82F6' },
-    green:  { bg: '#F0FDF4', border: '#BBF7D0', accent: '#16A34A' },
-    pink:   { bg: '#FDF2F8', border: '#F9A8D4', accent: '#EC4899' },
-    gray:   { bg: '#F9FAFB', border: '#E5E7EB', accent: '#6B7280' },
-  };
-  return colors[color] || colors.yellow;
+const TASK_TYPES = [
+  { key: 'envoyer_document', label: 'Envoyer document', icon: '📤' },
+  { key: 'appeler_client', label: 'Appeler le client', icon: '📞' },
+  { key: 'relance_paiement', label: 'Relance paiement', icon: '💰' },
+  { key: 'reunion', label: 'Réunion', icon: '🤝' },
+  { key: 'validation_facture', label: 'Validation facture', icon: '✅' },
+  { key: 'declaration_fiscale', label: 'Déclaration fiscale', icon: '📋' },
+  { key: 'bilan_annuel', label: 'Bilan annuel', icon: '📊' },
+  { key: 'autre', label: 'Autre', icon: '📌' },
+];
+
+function getTaskType(key: string) {
+  return TASK_TYPES.find(t => t.key === key) || { key: 'autre', label: key, icon: '📌' };
 }
 
-function formatNoteTime(iso: string) {
-  const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'));
-  const now = new Date();
-  const diff = (now.getTime() - d.getTime()) / 1000;
-  if (diff < 60) return "À l'instant";
-  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)}h`;
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
-}
+const STATUS_CFG: Record<string, { bg: string; color: string; label: string; icon: string }> = {
+  todo:        { bg: '#F3F4F6', color: '#6B7280', label: 'À faire', icon: '○' },
+  in_progress: { bg: '#EFF6FF', color: '#3B82F6', label: 'En cours', icon: '◑' },
+  done:        { bg: '#F0FDF4', color: '#16A34A', label: 'Terminé', icon: '✓' },
+  cancelled:   { bg: '#FEF2F2', color: '#EF4444', label: 'Annulé', icon: '✕' },
+};
 
-interface NoteCardProps {
-  note: { id: string; title: string | null; content: string; color: string; is_pinned: boolean; updated_at: string; author: { id: string | null; name: string; initials: string } };
-  onUpdate: (id: string, data: { title?: string; content?: string; color?: string }) => void;
+const PRIORITY_CFG: Record<string, { color: string; label: string }> = {
+  low: { color: '#3B82F6', label: 'Basse' },
+  normal: { color: '#F59E0B', label: 'Normale' },
+  high: { color: '#F97316', label: 'Haute' },
+  urgent: { color: '#EF4444', label: 'Urgente' },
+};
+
+// ─── Task tree components ───────────────────────────────────────────────────
+
+interface TaskRowProps {
+  task: { id: string; title: string; description: string | null; task_type: string; due_date: string | null; status: string; progress: number; priority: string; assignee: { id: string; name: string; initials: string } | null };
+  onUpdate: (id: string, data: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
-  onPin: (id: string) => void;
+  accountants: { id: string; name: string }[];
 }
 
-function NoteCard({ note, onUpdate, onDelete, onPin }: NoteCardProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(note.title ?? '');
-  const [editContent, setEditContent] = useState(note.content);
+function TaskRow({ task, onUpdate, onDelete, accountants }: TaskRowProps) {
   const [showActions, setShowActions] = useState(false);
-  const colors = getNoteColor(note.color);
+  const sc = STATUS_CFG[task.status] || STATUS_CFG.todo;
+  const pc = PRIORITY_CFG[task.priority] || PRIORITY_CFG.normal;
 
   return (
-    <div
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-      style={{ background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 14, padding: '16px 18px', borderLeft: `4px solid ${colors.accent}`, position: 'relative', transition: 'box-shadow 0.2s', boxShadow: showActions ? '0 4px 16px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.04)', minHeight: 120 }}>
-      {/* Pin indicator */}
-      {note.is_pinned && !showActions && <div style={{ position: 'absolute', top: 10, right: 10, color: '#F59E0B' }}><Pin size={14} fill="#F59E0B" /></div>}
+    <div onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 24px 10px 40px', borderBottom: '1px solid #F9FAFB', background: showActions ? '#FAFAFA' : 'white', transition: 'background 0.1s', opacity: task.status === 'cancelled' ? 0.6 : 1 }}>
+      {/* Status toggle */}
+      <button onClick={() => {
+        const next: Record<string, string> = { todo: 'in_progress', in_progress: 'done', done: 'todo', cancelled: 'todo' };
+        onUpdate(task.id, { status: next[task.status] || 'todo' });
+      }} style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${sc.color}`, background: task.status === 'done' ? sc.color : 'white', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: task.status === 'done' ? 'white' : sc.color, fontWeight: 700 }}
+        title={`Cliquer: ${task.status === 'done' ? 'À faire' : task.status === 'todo' ? 'En cours' : 'Terminé'}`}>
+        {task.status === 'done' ? '✓' : ''}
+      </button>
 
-      {/* Actions on hover */}
-      {showActions && !isEditing && (
-        <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
-          <button onClick={() => onPin(note.id)} title={note.is_pinned ? 'Désépingler' : 'Épingler'} style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: note.is_pinned ? '#F59E0B' : '#9CA3AF', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Pin size={13} /></button>
-          <button onClick={() => { setEditTitle(note.title ?? ''); setEditContent(note.content); setIsEditing(true); }} title="Modifier" style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Pencil size={13} /></button>
-          <button onClick={() => onDelete(note.id)} title="Supprimer" style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Trash2 size={13} /></button>
+      {/* Title + description */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: task.status === 'done' ? '#9CA3AF' : '#111827', textDecoration: task.status === 'done' ? 'line-through' : 'none' }}>{task.title}</div>
+        {task.description && <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.description}</div>}
+      </div>
+
+      {/* Priority dot */}
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: pc.color, flexShrink: 0 }} title={`Priorité: ${pc.label}`} />
+
+      {/* Progress bar */}
+      <div style={{ width: 80, flexShrink: 0 }}>
+        <div style={{ background: '#F3F4F6', borderRadius: 4, height: 6, overflow: 'hidden', marginBottom: 2 }}>
+          <div style={{ width: `${task.progress}%`, background: task.status === 'done' ? '#22C55E' : '#3B82F6', height: '100%', borderRadius: 4, transition: 'width 0.3s ease' }} />
+        </div>
+        <div style={{ fontSize: 10, color: '#9CA3AF', textAlign: 'center' }}>{task.progress}%</div>
+      </div>
+
+      {/* Progress slider on hover */}
+      {showActions && task.status !== 'done' && (
+        <input type="range" min="0" max="100" value={task.progress} onChange={e => onUpdate(task.id, { progress: parseInt(e.target.value) })} onClick={e => e.stopPropagation()} style={{ width: 60, cursor: 'pointer', accentColor: '#3B82F6' }} />
+      )}
+
+      {/* Status badge */}
+      <span style={{ background: sc.bg, color: sc.color, borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>{sc.icon} {sc.label}</span>
+
+      {/* Due date */}
+      {task.due_date && (
+        <span style={{ fontSize: 11, color: '#9CA3AF', flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 }}>
+          <Calendar size={11} />
+          {new Date(task.due_date + (task.due_date.endsWith('Z') ? '' : 'Z')).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+        </span>
+      )}
+
+      {/* Assignee avatar */}
+      {task.assignee ? (
+        <div title={task.assignee.name} style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #059669, #047857)', color: 'white', fontSize: 10, fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{task.assignee.initials}</div>
+      ) : (
+        <div title="Non assigné" style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px dashed #D1D5DB', flexShrink: 0 }} />
+      )}
+
+      {/* Hover actions */}
+      {showActions && (
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          <select value={task.assignee?.id || ''} onChange={e => onUpdate(task.id, { assigned_to_id: e.target.value || null })} onClick={e => e.stopPropagation()} style={{ height: 26, border: '1px solid #E5E7EB', borderRadius: 6, padding: '0 6px', fontSize: 11, cursor: 'pointer', background: 'white' }}>
+            <option value="">Assigner...</option>
+            {accountants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <button onClick={() => onDelete(task.id)} style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #FECACA', background: '#FEF2F2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}><Trash2 size={12} /></button>
         </div>
       )}
+    </div>
+  );
+}
 
-      {isEditing ? (
-        <>
-          {/* Color picker in edit mode */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-            {(['yellow', 'blue', 'green', 'pink', 'gray'] as const).map(c => (
-              <button key={c} onClick={() => onUpdate(note.id, { color: c })} style={{ width: 16, height: 16, borderRadius: '50%', background: getNoteColor(c).accent, border: note.color === c ? '2px solid #111827' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
-            ))}
-          </div>
-          <input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Titre" style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 14, fontWeight: 600, outline: 'none', marginBottom: 6, boxSizing: 'border-box', fontFamily: 'inherit' }} />
-          <textarea value={editContent} onChange={e => setEditContent(e.target.value)} autoFocus style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 13, resize: 'none', outline: 'none', lineHeight: 1.6, minHeight: 80, boxSizing: 'border-box', fontFamily: 'inherit', color: '#374151' }} />
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
-            <button onClick={() => setIsEditing(false)} style={{ padding: '4px 10px', fontSize: 12, background: 'white', border: '1px solid #E5E7EB', borderRadius: 6, cursor: 'pointer' }}>Annuler</button>
-            <button onClick={() => { onUpdate(note.id, { title: editTitle, content: editContent }); setIsEditing(false); }} style={{ padding: '4px 10px', fontSize: 12, background: colors.accent, color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Sauvegarder</button>
-          </div>
-        </>
-      ) : (
-        <>
-          {note.title && <div style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 6, paddingRight: note.is_pinned ? 20 : 0 }}>{note.title}</div>}
-          <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{note.content}</div>
-        </>
-      )}
-
-      {/* Footer */}
-      <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#9CA3AF' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {note.author?.initials && (
-            <span style={{ background: colors.accent, color: 'white', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>{note.author.initials}</span>
-          )}
-          {note.author?.name}
-        </span>
-        <span>{formatNoteTime(note.updated_at)}</span>
+function TaskTypeSection({ type, tasks, onUpdateTask, onDeleteTask, accountants }: {
+  type: string; tasks: TaskRowProps['task'][]; onUpdateTask: TaskRowProps['onUpdate']; onDeleteTask: TaskRowProps['onDelete']; accountants: TaskRowProps['accountants'];
+}) {
+  const typeInfo = getTaskType(type);
+  const done = tasks.filter(t => t.status === 'done').length;
+  return (
+    <div style={{ padding: '8px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 24px', fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.5px' }}>
+        <span>{typeInfo.icon}</span>
+        <span>{typeInfo.label}</span>
+        <span style={{ background: '#F3F4F6', borderRadius: 10, padding: '0 6px' }}>{done}/{tasks.length}</span>
       </div>
+      {tasks.map(task => <TaskRow key={task.id} task={task} onUpdate={onUpdateTask} onDelete={onDeleteTask} accountants={accountants} />)}
+    </div>
+  );
+}
+
+function MonthSection({ monthGroup, isLast, onUpdateTask, onDeleteTask, accountants }: {
+  monthGroup: { month: number; month_name: string; tasks: TaskRowProps['task'][]; total: number; done: number; progress: number };
+  isLast: boolean; onUpdateTask: TaskRowProps['onUpdate']; onDeleteTask: TaskRowProps['onDelete']; accountants: TaskRowProps['accountants'];
+}) {
+  const [isOpen, setIsOpen] = useState(true);
+  // Group tasks by type within this month
+  const byType: Record<string, TaskRowProps['task'][]> = {};
+  monthGroup.tasks.forEach(t => { (byType[t.task_type] ??= []).push(t); });
+
+  return (
+    <div style={{ borderBottom: isLast ? 'none' : '1px solid #F3F4F6' }}>
+      <div onClick={() => setIsOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', background: '#F8FAFC', cursor: 'pointer', borderBottom: isOpen ? '1px solid #F3F4F6' : 'none' }}>
+        <span style={{ color: '#9CA3AF', fontSize: 12 }}>{isOpen ? '▼' : '▶'}</span>
+        <span style={{ fontWeight: 600, fontSize: 14, color: '#374151' }}>{monthGroup.month_name}</span>
+        <span style={{ background: '#E5E7EB', color: '#6B7280', borderRadius: 20, padding: '1px 8px', fontSize: 11 }}>{monthGroup.done}/{monthGroup.total}</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ background: '#E5E7EB', borderRadius: 4, height: 5, overflow: 'hidden' }}>
+            <div style={{ width: `${monthGroup.progress}%`, background: monthGroup.progress === 100 ? '#22C55E' : monthGroup.progress > 50 ? '#3B82F6' : '#F59E0B', height: '100%', borderRadius: 4, transition: 'width 0.5s ease' }} />
+          </div>
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 600, color: monthGroup.progress === 100 ? '#16A34A' : '#6B7280' }}>{monthGroup.progress}%</span>
+      </div>
+      {isOpen && Object.entries(byType).map(([type, tasks]) => (
+        <TaskTypeSection key={type} type={type} tasks={tasks} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} accountants={accountants} />
+      ))}
+    </div>
+  );
+}
+
+function YearGroup({ yearGroup, onUpdateTask, onDeleteTask, accountants }: {
+  yearGroup: { year: number; months: { month: number; month_name: string; tasks: TaskRowProps['task'][]; total: number; done: number; progress: number }[]; total: number; done: number; progress: number };
+  onUpdateTask: TaskRowProps['onUpdate']; onDeleteTask: TaskRowProps['onDelete']; accountants: TaskRowProps['accountants'];
+}) {
+  const [isOpen, setIsOpen] = useState(true);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div onClick={() => setIsOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#1E2A4A', borderRadius: isOpen ? '12px 12px 0 0' : 12, cursor: 'pointer', color: 'white' }}>
+        <span style={{ fontSize: 14 }}>{isOpen ? '▼' : '▶'}</span>
+        <Calendar size={16} />
+        <span style={{ fontWeight: 700, fontSize: 16 }}>{yearGroup.year}</span>
+        <span style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: '2px 10px', fontSize: 12 }}>{yearGroup.done}/{yearGroup.total} tâches</span>
+        <div style={{ flex: 1, marginLeft: 8 }}>
+          <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+            <div style={{ width: `${yearGroup.progress}%`, background: yearGroup.progress === 100 ? '#22C55E' : '#60A5FA', height: '100%', transition: 'width 0.5s ease', borderRadius: 4 }} />
+          </div>
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 600, color: yearGroup.progress === 100 ? '#22C55E' : 'white' }}>{yearGroup.progress}%</span>
+      </div>
+      {isOpen && (
+        <div style={{ border: '1px solid #E5E7EB', borderTop: 'none', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
+          {yearGroup.months.map((mg, i) => (
+            <MonthSection key={mg.month} monthGroup={mg} isLast={i === yearGroup.months.length - 1} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} accountants={accountants} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
