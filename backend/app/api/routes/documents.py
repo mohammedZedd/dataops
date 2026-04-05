@@ -116,11 +116,13 @@ async def upload_document(
         target_client_id = new_client.id
 
     is_audio = file.content_type in _AUDIO_TYPES
+    source_val = "cabinet" if current_user.role in (UserRole.ADMIN, UserRole.ACCOUNTANT) and target_client_id else "client"
     doc = Document(
         client_id=target_client_id,
         uploaded_by_user_id=current_user.id,
         file_name=original_name,
         s3_key=s3_key,
+        source=source_val,
         file_size=len(content),
         doc_type="audio" if is_audio else None,
         description=description.strip() or None,

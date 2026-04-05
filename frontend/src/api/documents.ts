@@ -10,6 +10,7 @@ export interface AdminClientDoc {
   doc_type: string | null;
   description: string | null;
   is_new: boolean;
+  source: string | null;
   client_id: string | null;
   client_name: string | null;
   invoice_id: string | null;

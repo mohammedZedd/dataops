@@ -113,6 +113,9 @@ export interface ClientDocument {
   file_size: number | null;
   uploaded_at: string;
   status: DocumentStatus;
+  source?: string | null;
+  description?: string | null;
+  is_new?: boolean;
 }
 
 export type InvoiceStatus =

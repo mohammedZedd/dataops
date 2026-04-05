@@ -104,6 +104,11 @@ def send_message(conv_id: str, payload: SendMessageRequest, db: Session = Depend
     if current_user.role == UserRole.CLIENT:
         notification_service.notify_staff(db, company_id=conv.company_id, type="new_message", title="Nouveau message", message=f"{current_user.first_name} {current_user.last_name}: {msg.content[:60]}", link=f"/chat?conversation={conv_id}", client_id=conv.client_id)
         db.commit()
+    elif current_user.role in (UserRole.ADMIN, UserRole.ACCOUNTANT):
+        from app.models.notification import Notification as NotifModel
+        title = "Document reçu de votre cabinet" if payload.message_type == "file" else "Réponse de votre comptable"
+        db.add(NotifModel(company_id=conv.company_id, recipient_id=conv.client_user_id, type="new_message", title=title, message=msg.content[:80], link="/client/messages"))
+        db.commit()
 
     return {"id": msg.id, "conversation_id": msg.conversation_id, "sender_id": msg.sender_id, "sender_role": msg.sender_role, "content": msg.content, "message_type": msg.message_type, "file_name": msg.file_name, "file_url": msg.file_url, "document_id": msg.document_id, "is_read": msg.is_read, "created_at": msg.created_at.isoformat()}
 

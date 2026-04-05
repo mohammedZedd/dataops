@@ -26,6 +26,7 @@ class Document(Base):
     doc_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_new: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

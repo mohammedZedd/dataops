@@ -555,6 +555,36 @@ export default function ClientDocumentsPage() {
           </table>
         )}
       </div>
+
+      {/* Documents reçus du cabinet */}
+      {(() => {
+        const cabinetDocs = documents.filter(d => d.source === 'cabinet');
+        if (cabinetDocs.length === 0) return null;
+        return (
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-6">
+            <div className="px-4 py-3 border-b" style={{ borderColor: '#EDE9FE' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>📥</span>
+                <span className="text-sm font-medium" style={{ color: '#7C3AED' }}>Documents reçus du cabinet</span>
+                <span style={{ background: '#EDE9FE', color: '#7C3AED', borderRadius: 20, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{cabinetDocs.length}</span>
+              </div>
+            </div>
+            {cabinetDocs.map((doc, idx) => (
+              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: idx < cabinetDocs.length - 1 ? '1px solid #F3F4F6' : 'none', background: doc.is_new ? '#FAF5FF' : '#fff', borderLeft: doc.is_new ? '3px solid #7C3AED' : '3px solid #EDE9FE' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                  {doc.file_name?.endsWith('.pdf') ? '📄' : doc.file_name?.match(/\.(jpg|jpeg|png)$/i) ? '🖼️' : doc.file_name?.match(/\.(xlsx|xls)$/i) ? '📊' : '📎'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</p>
+                  <p style={{ fontSize: 11, color: '#7C3AED', marginTop: 2 }}>Envoyé par votre cabinet · {new Date(doc.uploaded_at).toLocaleDateString('fr-FR')}</p>
+                  {doc.description && <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 1, fontStyle: 'italic' }}>"{doc.description}"</p>}
+                </div>
+                <button onClick={() => handleDownload(doc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Télécharger"><Download size={14} /></button>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
