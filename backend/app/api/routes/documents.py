@@ -195,6 +195,94 @@ def delete_document(
 
 # ─── List (user's own) ────────────────────────────────────────────────────────
 
+# ─── Admin: all documents + stats ────────────────────────────────────────────
+
+@router.get("/documents/stats")
+def get_documents_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from datetime import datetime, timedelta
+    from sqlalchemy import or_
+
+    if current_user.role == UserRole.CLIENT:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
+
+    now = datetime.utcnow()
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    three_days_ago = now - timedelta(days=3)
+
+    from app.models.invoice import Invoice as InvoiceModel
+
+    company_docs = (
+        db.query(Document)
+        .join(Client, Document.client_id == Client.id)
+        .filter(Client.company_id == current_user.company_id)
+    )
+
+    total_month = company_docs.filter(Document.uploaded_at >= start_of_month).count()
+
+    pending = (
+        company_docs
+        .outerjoin(InvoiceModel, InvoiceModel.document_id == Document.id)
+        .filter(or_(InvoiceModel.id == None, InvoiceModel.status == "to_review"))
+        .count()
+    )
+
+    validated = (
+        db.query(InvoiceModel)
+        .join(Document, InvoiceModel.document_id == Document.id)
+        .join(Client, Document.client_id == Client.id)
+        .filter(Client.company_id == current_user.company_id, InvoiceModel.status == "validated")
+        .count()
+    )
+
+    rejected = (
+        db.query(InvoiceModel)
+        .join(Document, InvoiceModel.document_id == Document.id)
+        .join(Client, Document.client_id == Client.id)
+        .filter(Client.company_id == current_user.company_id, InvoiceModel.status == "rejected")
+        .count()
+    )
+
+    urgent = (
+        company_docs
+        .outerjoin(InvoiceModel, InvoiceModel.document_id == Document.id)
+        .filter(
+            or_(InvoiceModel.id == None, InvoiceModel.status == "to_review"),
+            Document.uploaded_at <= three_days_ago,
+        )
+        .count()
+    )
+
+    return {
+        "total_this_month": total_month,
+        "pending": pending,
+        "validated": validated,
+        "rejected": rejected,
+        "urgent": urgent,
+    }
+
+
+@router.get("/documents/all", response_model=list[DocumentRead])
+def list_all_documents(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role == UserRole.CLIENT:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
+
+    docs = (
+        db.query(Document)
+        .join(Client, Document.client_id == Client.id)
+        .filter(Client.company_id == current_user.company_id)
+        .order_by(Document.uploaded_at.desc())
+        .limit(200)
+        .all()
+    )
+    return [document_service._to_read(d) for d in docs]
+
+
 @router.get("/documents/my", response_model=list[DocumentRead])
 def list_my_documents(
     db: Session = Depends(get_db),

@@ -9,8 +9,28 @@ export interface AdminClientDoc {
   status: string;
   doc_type: string | null;
   description: string | null;
+  client_id: string | null;
+  client_name: string | null;
   invoice_id: string | null;
   invoice_status: string | null;
+}
+
+export interface DocumentStats {
+  total_this_month: number;
+  pending: number;
+  validated: number;
+  rejected: number;
+  urgent: number;
+}
+
+export async function getAllDocuments(): Promise<AdminClientDoc[]> {
+  const { data } = await apiClient.get<AdminClientDoc[]>('/documents/all');
+  return data;
+}
+
+export async function getDocumentStats(): Promise<DocumentStats> {
+  const { data } = await apiClient.get<DocumentStats>('/documents/stats');
+  return data;
 }
 
 export async function getClientDocuments(clientId: string): Promise<AdminClientDoc[]> {

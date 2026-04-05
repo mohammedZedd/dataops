@@ -25,6 +25,7 @@ class DocumentRead(BaseModel):
     status: DocumentStatus
     doc_type: Optional[str] = None
     description: Optional[str] = None
+    client_name: Optional[str] = None
     invoice_id: Optional[str] = None
     invoice_status: Optional[str] = None
 
