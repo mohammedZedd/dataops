@@ -7,7 +7,7 @@ import {
   Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X,
 } from 'lucide-react';
 import { getClient, getClientUsers, updateClientUser, revokeClientAccess, restoreClientAccess } from '../api/clients';
-import { getClientDocuments, getPresignedDownloadUrl, createInvoiceFromDocument } from '../api/documents';
+import { getClientDocuments, getPresignedDownloadUrl, getPresignedPreviewUrl, createInvoiceFromDocument } from '../api/documents';
 import type { AdminClientDoc } from '../api/documents';
 import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
 import type { Client, ClientUser } from '../types';
@@ -53,10 +53,10 @@ const INPUT_STYLE: React.CSSProperties = {
   border: '1px solid #E5E7EB', outline: 'none', background: '#fff',
 };
 
-const INVOICE_STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
-  to_review: { bg: '#FEF3C7', color: '#92400E', label: 'À traiter' },
-  validated: { bg: '#DCFCE7', color: '#16A34A', label: 'Validée' },
-  rejected:  { bg: '#FEE2E2', color: '#DC2626', label: 'Rejetée' },
+const INVOICE_STATUS_STYLES: Record<string, { bg: string; color: string; border: string; label: string }> = {
+  to_review: { bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA', label: 'À traiter' },
+  validated: { bg: '#F0FDF4', color: '#16A34A', border: '#BBF7D0', label: 'Validée' },
+  rejected:  { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', label: 'Rejetée' },
 };
 
 function isAudioDoc(doc: AdminClientDoc): boolean {
@@ -160,6 +160,10 @@ export default function ClientDetailPage() {
   }
 
   // ─── Document handlers ─────────────────────────────────────────────────────
+
+  async function handlePreview(docId: string) {
+    try { const url = await getPresignedPreviewUrl(docId); window.open(url, '_blank'); } catch { /* */ }
+  }
 
   async function handleDownload(docId: string) {
     try { const url = await getPresignedDownloadUrl(docId); window.open(url, '_blank'); } catch { /* */ }
@@ -434,7 +438,13 @@ export default function ClientDetailPage() {
                         {isAudioDoc(doc) ? (
                           <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12, background: '#F5F3FF', color: '#7C3AED', border: '1px solid #DDD6FE' }}>Audio</span>
                         ) : doc.invoice_id && doc.invoice_status ? (
-                          <button onClick={() => handleViewInvoice(doc.invoice_id!)} style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', background: INVOICE_STATUS_STYLES[doc.invoice_status]?.bg ?? '#F3F4F6', color: INVOICE_STATUS_STYLES[doc.invoice_status]?.color ?? '#6B7280' }}>
+                          <button onClick={() => handleViewInvoice(doc.invoice_id!)} style={{
+                            fontSize: 12, fontWeight: 500, padding: '3px 10px', borderRadius: 20, cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            background: INVOICE_STATUS_STYLES[doc.invoice_status]?.bg ?? '#F3F4F6',
+                            color: INVOICE_STATUS_STYLES[doc.invoice_status]?.color ?? '#6B7280',
+                            border: `1px solid ${INVOICE_STATUS_STYLES[doc.invoice_status]?.border ?? '#E5E7EB'}`,
+                          }}>
                             {INVOICE_STATUS_STYLES[doc.invoice_status]?.label ?? doc.invoice_status}
                           </button>
                         ) : null}
@@ -442,18 +452,28 @@ export default function ClientDetailPage() {
                         <span style={{ fontSize: 12, color: '#9CA3AF', whiteSpace: 'nowrap', flexShrink: 0 }}>
                           {new Date(doc.uploaded_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                         </span>
-                        {/* Audio play */}
-                        {isAudioDoc(doc) && (
+                        {isAudioDoc(doc) ? (
+                          /* Audio: play toggle */
                           <IconBtn onClick={() => toggleAudioPlay(doc.id)} title={playingId === doc.id ? 'Arrêter' : 'Écouter'}
                             active={playingId === doc.id} color="#7C3AED" bgHover="#F5F3FF">
                             {playingId === doc.id ? <X size={15} /> : <Eye size={15} />}
                           </IconBtn>
-                        )}
-                        {/* Create invoice (non-audio only) */}
-                        {!isAudioDoc(doc) && !doc.invoice_id && (
-                          <IconBtn onClick={() => handleCreateInvoice(doc.id)} title="Créer une facture" disabled={creatingInv === doc.id}>
-                            {creatingInv === doc.id ? <Loader2 size={15} className="animate-spin" /> : <ClipboardList size={15} />}
-                          </IconBtn>
+                        ) : (
+                          /* Non-audio: preview + invoice */
+                          <>
+                            <IconBtn onClick={() => handlePreview(doc.id)} title="Prévisualiser">
+                              <Eye size={15} />
+                            </IconBtn>
+                            {doc.invoice_id ? (
+                              <IconBtn onClick={() => handleViewInvoice(doc.invoice_id!)} title="Voir la facture" color="#16A34A" bgHover="#F0FDF4">
+                                <ClipboardList size={15} />
+                              </IconBtn>
+                            ) : (
+                              <IconBtn onClick={() => handleCreateInvoice(doc.id)} title="Créer une facture" disabled={creatingInv === doc.id}>
+                                {creatingInv === doc.id ? <Loader2 size={15} className="animate-spin" /> : <ClipboardList size={15} />}
+                              </IconBtn>
+                            )}
+                          </>
                         )}
                         {/* Download */}
                         <IconBtn onClick={() => handleDownload(doc.id)} title="Télécharger">
