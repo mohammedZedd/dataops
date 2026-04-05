@@ -97,6 +97,7 @@ export default function ClientDetailPage() {
 
   // Revoke
   const [revoking, setRevoking] = useState(false);
+  const [fiscalOpen, setFiscalOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!clientId) { setError('ID manquant.'); setLoading(false); return; }
@@ -204,8 +205,6 @@ export default function ClientDetailPage() {
   const groups = groupByMonth(docs);
 
   // ─── Render ────────────────────────────────────────────────────────────────
-
-  const [fiscalOpen, setFiscalOpen] = useState(false);
 
   return (
     <>
