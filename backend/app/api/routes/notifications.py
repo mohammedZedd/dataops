@@ -22,13 +22,6 @@ def list_notifications(
         .limit(50)
     ).all()
 
-    unread = db.scalar(
-        select(Notification.id).where(
-            Notification.recipient_id == current_user.id,
-            Notification.is_read == False,
-        ).with_only_columns(Notification.id).count()
-    ) or 0
-    # simpler count
     unread = sum(1 for n in notifs if not n.is_read)
 
     return {
