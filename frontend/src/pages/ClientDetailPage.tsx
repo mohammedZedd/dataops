@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Calendar,
@@ -7,7 +7,7 @@ import {
   Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X,
 } from 'lucide-react';
 import { getClient, getClientUsers, updateClientUser, revokeClientAccess, restoreClientAccess } from '../api/clients';
-import { getClientDocuments, getPresignedDownloadUrl, getPresignedPreviewUrl, createInvoiceFromDocument } from '../api/documents';
+import { getClientDocuments, getPresignedDownloadUrl, getPresignedPreviewUrl, createInvoiceFromDocument, uploadDocument } from '../api/documents';
 import type { AdminClientDoc } from '../api/documents';
 import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
 import type { Client, ClientUser } from '../types';
@@ -100,6 +100,12 @@ export default function ClientDetailPage() {
   const [revoking, setRevoking] = useState(false);
   const [fiscalOpen, setFiscalOpen] = useState(false);
 
+  // Admin upload
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+
   const fetchData = useCallback(async () => {
     if (!clientId) { setError('ID manquant.'); setLoading(false); return; }
     setLoading(true); setError(null);
@@ -179,6 +185,18 @@ export default function ClientDetailPage() {
   function handleViewInvoice(invoiceId: string) {
     if (!clientId) return;
     navigate(`/clients/${clientId}/invoices/${invoiceId}`);
+  }
+
+  async function handleAdminUpload() {
+    if (!uploadFile || !clientId) return;
+    setUploading(true);
+    try {
+      await uploadDocument(uploadFile, undefined, undefined, clientId);
+      setUploadFile(null);
+      setShowUpload(false);
+      await fetchData();
+    } catch { /* ignore */ }
+    finally { setUploading(false); }
   }
 
   async function toggleAudioPlay(docId: string) {
@@ -388,10 +406,38 @@ export default function ClientDetailPage() {
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111827' }}>Documents de {client.name}</h2>
-            <span style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: '#EFF6FF', color: '#3B82F6' }}>
-              {docs.length} document{docs.length !== 1 ? 's' : ''} au total
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: '#EFF6FF', color: '#3B82F6' }}>
+                {docs.length} document{docs.length !== 1 ? 's' : ''} au total
+              </span>
+              <button onClick={() => setShowUpload(v => !v)} style={{ padding: '6px 14px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                + Ajouter
+              </button>
+            </div>
           </div>
+
+          {/* Admin upload */}
+          {showUpload && (
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 20, marginBottom: 16 }}>
+              <input ref={uploadInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls" className="hidden" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) setUploadFile(f); e.target.value = ''; }} />
+              {uploadFile ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 14, fontWeight: 500, color: '#111827', flex: 1 }}>{uploadFile.name}</span>
+                  <button onClick={() => setUploadFile(null)} style={{ fontSize: 12, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer' }}>Changer</button>
+                  <button onClick={handleAdminUpload} disabled={uploading}
+                    style={{ padding: '8px 16px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: uploading ? 0.6 : 1 }}>
+                    {uploading ? 'Envoi…' : 'Envoyer'}
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => uploadInputRef.current?.click()}
+                  style={{ width: '100%', padding: '24px 16px', border: '2px dashed #E5E7EB', borderRadius: 10, background: '#F9FAFB', cursor: 'pointer', textAlign: 'center', color: '#6B7280', fontSize: 14 }}>
+                  Cliquer pour sélectionner un fichier (PDF, JPG, PNG, XLSX)
+                </button>
+              )}
+            </div>
+          )}
 
           {error && <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 13, color: '#DC2626', marginBottom: 16 }}>{error}</div>}
 

@@ -69,6 +69,7 @@ _AUDIO_TYPES = {
 async def upload_document(
     file: UploadFile = File(...),
     description: str = Form(""),
+    client_id: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -94,9 +95,17 @@ async def upload_document(
         content_type=file.content_type or "application/octet-stream",
     )
 
-    # Resolve client_id: use user's linked client, or auto-create for CLIENT users
-    client_id = current_user.client_id
-    if not client_id and current_user.role == UserRole.CLIENT:
+    # Resolve client_id
+    target_client_id: str | None = None
+    if client_id and current_user.role in (UserRole.ADMIN, UserRole.ACCOUNTANT):
+        # Admin/accountant uploading on behalf of a client
+        target_client = client_service.get_client(db, client_id)
+        if not target_client or target_client.company_id != current_user.company_id:
+            raise HTTPException(status_code=404, detail="Client introuvable.")
+        target_client_id = client_id
+    else:
+        target_client_id = current_user.client_id
+    if not target_client_id and current_user.role == UserRole.CLIENT:
         new_client = Client(
             name=f"{current_user.first_name} {current_user.last_name}",
             company_id=current_user.company_id,
@@ -104,11 +113,11 @@ async def upload_document(
         db.add(new_client)
         db.flush()
         current_user.client_id = new_client.id
-        client_id = new_client.id
+        target_client_id = new_client.id
 
     is_audio = file.content_type in _AUDIO_TYPES
     doc = Document(
-        client_id=client_id,
+        client_id=target_client_id,
         uploaded_by_user_id=current_user.id,
         file_name=original_name,
         s3_key=s3_key,
@@ -491,10 +500,30 @@ def extract_document_data(
             raise HTTPException(status_code=403, detail="Accès refusé.")
 
     ext = doc.file_name.lower().rsplit(".", 1)[-1] if "." in doc.file_name else ""
+
+    if ext in ("xlsx", "xls"):
+        # Excel: use openpyxl-based extraction
+        try:
+            from app.utils.invoice_parser import InvoiceParser
+            pdf_bytes = s3_service.download_file(doc.s3_key)
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(pdf_bytes), read_only=True, data_only=True)
+            all_values = []
+            for row in wb[wb.sheetnames[0]].iter_rows(max_row=50, values_only=True):
+                for cell in row:
+                    if cell is not None:
+                        all_values.append(str(cell))
+            full_text = " ".join(all_values)
+            result = InvoiceParser().parse_text(full_text)
+            result["confidence"] = min(result.get("confidence", 0), 0.5)
+            return ExtractionResult(**result)
+        except Exception as exc:
+            raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Extraction Excel échouée: {exc}")
+
     if ext not in ("pdf", "jpg", "jpeg", "png"):
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Format non supporté. Utilisez PDF, JPEG ou PNG.",
+            detail="Format non supporté. Utilisez PDF, JPEG, PNG ou XLSX.",
         )
 
     try:

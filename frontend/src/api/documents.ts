@@ -77,10 +77,12 @@ export async function uploadDocument(
   file: File,
   onProgress?: (pct: number) => void,
   description?: string,
+  clientId?: string,
 ): Promise<ClientDocument> {
   const form = new FormData();
   form.append('file', file);
   if (description) form.append('description', description);
+  if (clientId) form.append('client_id', clientId);
 
   const { data } = await apiClient.post<ClientDocument>('/documents/upload', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
