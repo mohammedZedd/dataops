@@ -22,11 +22,10 @@ export function ChatWidget() {
   const [sending, setSending] = useState(false);
   const [unread, setUnread] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
-
-  // Don't show for admin/accountant
-  if (user?.role !== 'client') return null;
+  const isClient = user?.role === 'client';
 
   const fetchConv = useCallback(async () => {
+    if (!isClient) return;
     try {
       const { data } = await apiClient.get('/chat/conversations');
       if (data.conversations?.length > 0) {
@@ -46,7 +45,7 @@ export function ChatWidget() {
     } catch { /* */ }
   }, [convId]);
 
-  useEffect(() => { fetchConv(); const t = setInterval(fetchConv, 30000); return () => clearInterval(t); }, [fetchConv]);
+  useEffect(() => { if (!isClient) return; fetchConv(); const t = setInterval(fetchConv, 30000); return () => clearInterval(t); }, [fetchConv, isClient]);
   useEffect(() => { if (open && convId) { fetchMsgs(); const t = setInterval(fetchMsgs, 5000); return () => clearInterval(t); } }, [open, convId, fetchMsgs]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
 
@@ -67,6 +66,8 @@ export function ChatWidget() {
     } catch { setText(content); }
     finally { setSending(false); }
   }
+
+  if (!isClient) return null;
 
   return (
     <>
