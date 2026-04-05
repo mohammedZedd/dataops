@@ -7,6 +7,23 @@ from app.utils.date_parser import parse_date
 from app.utils.moroccan_fields import extract_ice, extract_if, extract_rc, extract_tp, extract_cnss, detect_currency
 from app.utils.confidence_calculator import calculate_confidence
 
+_SKIP_LINE_PATTERNS = [
+    r"^\[",
+    r"\[.*\]",
+    r"^Destinataire",
+    r"^SIRET\s*:",
+    r"^No\s+de\s+TVA",
+    r"^Adresse",
+    r"^Tél",
+    r"^Date",
+    r"^Échéance",
+    r"^Facture",
+    r"^Désignation",
+    r"^Total",
+    r"^TVA",
+    r"^\d+,\d+",
+]
+
 
 class InvoiceParser:
     """Parse une réponse Textract (Blocks) en champs de facture structurés."""
@@ -26,14 +43,21 @@ class InvoiceParser:
                     key_value_pairs[key_text.lower().strip().rstrip(":")] = value_text.strip()
 
         full_text = "\n".join(lines)
+        return self._build_result(full_text, lines, key_value_pairs)
 
+    def parse_text(self, text: str) -> dict:
+        """Parse du texte brut directement (sans réponse Textract)."""
+        lines = [l for l in text.split("\n") if l.strip()]
+        return self._build_result(text, lines, {})
+
+    def _build_result(self, full_text: str, lines: list[str], kvp: dict) -> dict:
         result = {
-            "invoice_number": self._extract_invoice_number(full_text, key_value_pairs),
-            "date": parse_date(full_text, key_value_pairs),
-            "supplier_name": self._extract_supplier_name(lines, key_value_pairs),
-            "total_amount": self._extract_amount_ttc(full_text, key_value_pairs),
-            "vat_amount": self._extract_vat_amount(full_text, key_value_pairs),
-            "ht_amount": self._extract_amount_ht(full_text, key_value_pairs),
+            "invoice_number": self._extract_invoice_number(full_text, kvp),
+            "date": parse_date(full_text, kvp),
+            "supplier_name": self._extract_supplier_name(lines, kvp),
+            "total_amount": self._extract_amount_ttc(full_text, kvp),
+            "vat_amount": self._extract_vat_amount(full_text, kvp),
+            "ht_amount": self._extract_amount_ht(full_text, kvp),
             "vat_rate": self._extract_vat_rate(full_text),
             "ice": extract_ice(full_text),
             "if_fiscal": extract_if(full_text),
@@ -88,86 +112,145 @@ class InvoiceParser:
 
     def _extract_invoice_number(self, text: str, kvp: dict) -> Optional[str]:
         patterns = [
+            # Handle № special character (French invoices)
+            r"[Ff]acture\s*[№N][°o]?\.?\s*:?\s*(\d+)",
+            r"[Ff]acture\s*#\s*(\d+)",
+            r"№\s*(\d+)",
+            r"N[°o]\.?\s*[Ff]acture\s*:?\s*(\d+)",
+            # Standard formats with alphanumeric codes
             r"(?:Facture\s*[Nn][°ºo]\.?\s*:?\s*)([A-Za-z0-9\-/_.]+)",
             r"(?:N[°ºo]\s*[Ff]acture\s*:?\s*)([A-Za-z0-9\-/_.]+)",
             r"(?:Invoice\s*(?:No|N°|#)\s*:?\s*)([A-Za-z0-9\-/_.]+)",
-            r"(?:Réf(?:érence)?\s*:?\s*)([A-Za-z0-9\-/_.]+)",
             r"(FAC-\d{4}-\d+)",
             r"(F\d{4,})",
+            # Moroccan reference formats
+            r"(?:Facture\s*réf\.?\s*:?\s*)([A-Za-z0-9\-/_.]+)",
+            r"(?:Référence\s*:?\s*)([A-Za-z0-9\-/_.]+)",
+            r"(?:Réf\.?\s*:?\s*)([A-Za-z0-9\-/_.]+)",
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return match.group(1) if match.lastindex else match.group(0)
+                value = match.group(1) if match.lastindex else match.group(0)
+                if "[" in value or "]" in value:
+                    continue
+                return value.strip()
 
-        for key in ["n° facture", "numéro facture", "facture n°", "invoice no", "référence"]:
+        for key in ["n° facture", "numéro facture", "facture n°",
+                     "invoice no", "réf", "référence", "facture №"]:
             if key in kvp:
-                return kvp[key]
+                val = kvp[key]
+                if val and "[" not in val:
+                    return val
         return None
 
     def _extract_supplier_name(self, lines: list[str], kvp: dict) -> Optional[str]:
-        patterns = [
-            r"(?:De\s*:|Fournisseur\s*:|Émetteur\s*:|Société\s*:|Raison\s+sociale\s*:)\s*(.+)",
-            r"(?:SARL|SA\s|SNC|EURL)\s+(.+)",
+        supplier_patterns = [
+            r"(?:De\s*:|Fournisseur\s*:|Émetteur\s*:|Société\s*:|Vendeur\s*:|Raison\s+sociale\s*:)\s*(.+)",
+            r"(?:SARL|SA\s|SNC|EURL|Auto-entrepreneur)\s+([A-Za-zÀ-ÿ].+)",
         ]
-        for line in lines[:10]:
-            for pattern in patterns:
+
+        def _should_skip(line: str) -> bool:
+            return any(re.search(p, line, re.IGNORECASE) for p in _SKIP_LINE_PATTERNS)
+
+        # Explicit supplier keywords
+        for line in lines:
+            if _should_skip(line):
+                continue
+            for pattern in supplier_patterns:
                 match = re.search(pattern, line, re.IGNORECASE)
                 if match:
-                    return match.group(1).strip()
+                    val = match.group(1).strip()
+                    if val and "[" not in val and len(val) > 2:
+                        return val
 
-        for key in ["fournisseur", "émetteur", "société", "de"]:
+        # Key-value pairs
+        for key in ["fournisseur", "émetteur", "société", "de", "vendeur"]:
             if key in kvp:
-                return kvp[key]
+                val = kvp[key]
+                if val and "[" not in val and len(val) > 2:
+                    return val
 
-        # Fallback: first non-trivial line
-        for line in lines[:5]:
-            if len(line) > 3 and not re.match(r"^\d", line):
-                skip = any(kw in line.lower() for kw in [
-                    "facture", "date", "n°", "page", "tel", "fax", "email", "@", "www",
-                ])
-                if not skip:
-                    return line.strip()
+        # Fallback: company name in footer (emitter usually at bottom)
+        footer_lines = lines[-20:] if len(lines) > 20 else lines
+        for line in footer_lines:
+            line = line.strip()
+            if len(line) < 3 or _should_skip(line):
+                continue
+            if re.match(r"^[\d\s.,€$]+$", line):
+                continue
+            if re.search(r"IBAN|SWIFT|BIC", line, re.IGNORECASE):
+                continue
+            if re.match(r"^[A-ZÀ-Ü][a-zA-ZÀ-ÿ\s.\-&]+$", line):
+                return line
+
         return None
 
     def _extract_amount_ttc(self, text: str, kvp: dict) -> Optional[float]:
         patterns = [
-            r"(?:Total\s*TTC|Montant\s*TTC|Net\s*[àa]\s*payer|Total\s*[àa]\s*payer)\s*:?\s*([\d\s.,]+)",
+            r"(?:Total\s*TTC|Montant\s*TTC|Net\s*[àa]\s*payer|Total\s*[àa]\s*payer|TOTAL\s*TTC)\s*:?\s*([\d\s.,]+)\s*(?:MAD|DH|Dhs|€|EUR)?",
+            r"(?:Total\s*général|Montant\s*total)\s*:?\s*([\d\s.,]+)",
+            r"Total\s+TTC\s*:\s*([\d.,\s]+)",
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return parse_amount(match.group(1))
+                val = parse_amount(match.group(1))
+                if val and val > 0:
+                    return val
 
         for key in ["total ttc", "net à payer", "montant ttc", "total à payer"]:
             if key in kvp:
-                return parse_amount(kvp[key])
+                val = parse_amount(kvp[key])
+                if val and val > 0:
+                    return val
         return None
 
     def _extract_vat_amount(self, text: str, kvp: dict) -> Optional[float]:
-        match = re.search(
-            r"(?:Montant\s*TVA|TVA|T\.V\.A\.?)\s*(?:\(\d+%?\))?\s*:?\s*([\d\s.,]+)",
-            text, re.IGNORECASE,
-        )
-        if match:
-            return parse_amount(match.group(1))
+        patterns = [
+            # TVA(20%): 80,00 € or TVA (20%) : 80,00
+            r"TVA\s*\(\s*\d+\s*%\s*\)\s*:?\s*([\d\s.,]+)\s*(?:MAD|DH|Dhs|€|EUR)?",
+            # TVA 20%: 2 000,00 MAD or TVA 20% : 80,00 €
+            r"TVA\s+\d+\s*%\s*:?\s*([\d\s.,]+)\s*(?:MAD|DH|Dhs|€|EUR)?",
+            # Montant TVA: 80,00
+            r"(?:Montant\s*TVA)\s*:?\s*([\d\s.,]+)\s*(?:MAD|DH|€)?",
+            # T.V.A : 80,00
+            r"T\.V\.A\.?\s*:?\s*([\d\s.,]+)\s*(?:MAD|DH|€)?",
+            # Taxe sur la Valeur Ajoutée
+            r"(?:Taxe\s*sur\s*la\s*[Vv]aleur\s*[Aa]joutée)\s*:?\s*([\d\s.,]+)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                val = parse_amount(match.group(1))
+                if val and val > 0:
+                    return val
 
         for key in ["tva", "montant tva", "t.v.a"]:
             if key in kvp:
-                return parse_amount(kvp[key])
+                val = parse_amount(kvp[key])
+                if val and val > 0:
+                    return val
         return None
 
     def _extract_amount_ht(self, text: str, kvp: dict) -> Optional[float]:
-        match = re.search(
-            r"(?:Total\s*HT|Montant\s*HT|Sous[\s-]*total|Base\s*HT)\s*:?\s*([\d\s.,]+)",
-            text, re.IGNORECASE,
-        )
-        if match:
-            return parse_amount(match.group(1))
+        patterns = [
+            r"(?:Total\s*HT|Montant\s*HT|Sous[\s-]*total|Base\s*HT|TOTAL\s*HT)\s*:?\s*([\d\s.,]+)\s*(?:MAD|DH|€)?",
+            # "Total: 400,00 €" (without HT label, before TVA line)
+            r"^Total\s*:\s*([\d.,\s]+)\s*(?:€|MAD|DH)?",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                val = parse_amount(match.group(1))
+                if val and val > 0:
+                    return val
 
-        for key in ["total ht", "montant ht", "sous-total", "base ht"]:
+        for key in ["total ht", "montant ht", "sous-total", "base ht", "total"]:
             if key in kvp:
-                return parse_amount(kvp[key])
+                val = parse_amount(kvp[key])
+                if val and val > 0:
+                    return val
         return None
 
     def _extract_vat_rate(self, text: str) -> float:

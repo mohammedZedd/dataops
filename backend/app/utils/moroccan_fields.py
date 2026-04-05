@@ -21,8 +21,8 @@ def extract_if(text: str) -> Optional[str]:
 def extract_rc(text: str) -> Optional[str]:
     """RC — Registre de Commerce."""
     match = re.search(
-        r"(?:RC|R\.?C\.?|Registre\s*(?:de\s*)?Commerce)\s*:?\s*([A-Z0-9\-/]+)",
-        text, re.IGNORECASE,
+        r"(?:(?:^|\s)RC|R\.C\.?|Registre\s*(?:de\s*)?Commerce)\s*:\s*([A-Z0-9\-/]+)",
+        text, re.IGNORECASE | re.MULTILINE,
     )
     return match.group(1) if match else None
 

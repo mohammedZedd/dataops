@@ -205,6 +205,17 @@ export function InvoiceForm({ invoice, extraction, extracting, extractionError, 
         </div>
       )}
 
+      {/* Currency warning */}
+      {!extracting && extraction && extraction.currency === 'EUR' && (
+        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
+          <Info size={13} className="text-blue-500 flex-shrink-0 mt-0.5" />
+          <div className="text-[12px] text-blue-700">
+            <p>Devise détectée : <span className="font-semibold">EUR</span> — Les montants sont en euros.</p>
+            <p className="text-[11px] text-blue-500 mt-0.5">Convertissez en MAD si nécessaire (1 EUR ≈ 10.8 MAD, taux indicatif).</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 space-y-4">
         {/* Direction toggle */}
         <Field label="Direction">

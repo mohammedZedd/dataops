@@ -2,13 +2,16 @@
 
 
 def calculate_confidence(result: dict) -> float:
-    """Score entre 0 et 1 basé sur le nombre de champs clés extraits."""
-    key_fields = [
-        "invoice_number",
-        "date",
-        "supplier_name",
-        "total_amount",
-        "vat_amount",
-    ]
-    filled = sum(1 for f in key_fields if result.get(f) is not None)
-    return round(filled / len(key_fields), 2)
+    """Score pondéré entre 0 et 1 basé sur les champs clés extraits."""
+    scores = {
+        "invoice_number": 0.25,
+        "date": 0.20,
+        "supplier_name": 0.20,
+        "total_amount": 0.20,
+        "vat_amount": 0.15,
+    }
+    total = 0.0
+    for field, weight in scores.items():
+        if result.get(field) is not None:
+            total += weight
+    return round(total, 2)
