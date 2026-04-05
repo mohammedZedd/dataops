@@ -205,15 +205,18 @@ export default function ClientDetailPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
+  const [fiscalOpen, setFiscalOpen] = useState(false);
+
   return (
     <>
       {/* Back */}
-      <button onClick={() => navigate('/clients')} className="flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-gray-700 transition-colors mb-4">
+      <button onClick={() => navigate('/clients')}
+        className="flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-blue-600 transition-colors mb-3">
         <ArrowLeft size={14} /> Clients
       </button>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 20, borderBottom: '1px solid #E5E7EB', marginBottom: 0 }}>
         <div style={{ height: 48, width: 48, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 17, fontWeight: 700 }}>
           {initials}
         </div>
@@ -224,119 +227,129 @@ export default function ClientDetailPage() {
               {isActive ? 'Actif' : 'Inactif'}
             </span>
           </div>
-          <p style={{ fontSize: 14, color: '#6B7280', marginTop: 2 }}>
+          <p style={{ fontSize: 14, color: '#6B7280', marginTop: 4 }}>
             {clientUser?.email ?? ''}{clientUser?.email && client.name ? ' · ' : ''}{client.name}
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #E5E7EB', marginBottom: 24 }}>
-        <button onClick={() => switchTab('details')} style={{
-          padding: '12px 16px', fontSize: 14, fontWeight: activeTab === 'details' ? 600 : 400,
-          color: activeTab === 'details' ? '#3B82F6' : '#6B7280',
-          borderBottom: activeTab === 'details' ? '2px solid #3B82F6' : '2px solid transparent',
-          background: 'none', border: 'none', borderBottomStyle: 'solid', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          <User size={15} /> Détails du client
-        </button>
-        <button onClick={() => switchTab('documents')} style={{
-          padding: '12px 16px', fontSize: 14, fontWeight: activeTab === 'documents' ? 600 : 400,
-          color: activeTab === 'documents' ? '#3B82F6' : '#6B7280',
-          borderBottom: activeTab === 'documents' ? '2px solid #3B82F6' : '2px solid transparent',
-          background: 'none', border: 'none', borderBottomStyle: 'solid', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          <FileText size={15} /> Documents ({docs.length})
-        </button>
+      <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #F3F4F6', marginBottom: 28 }}>
+        {(['details', 'documents'] as const).map(tab => (
+          <button key={tab} onClick={() => switchTab(tab)} style={{
+            padding: '14px 20px', fontSize: 14, fontWeight: activeTab === tab ? 600 : 400,
+            color: activeTab === tab ? '#3B82F6' : '#6B7280',
+            borderBottom: activeTab === tab ? '2px solid #3B82F6' : '2px solid transparent',
+            marginBottom: -2, background: 'none', border: 'none', borderBottomStyle: 'solid',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 0.15s',
+          }}>
+            {tab === 'details' ? <User size={16} /> : <FileText size={16} />}
+            {tab === 'details' ? 'Détails du client' : 'Documents'}
+            {tab === 'documents' && (
+              <span style={{ fontSize: 12, padding: '1px 8px', borderRadius: 20, background: '#EFF6FF', color: '#3B82F6', fontWeight: 600, marginLeft: 2 }}>
+                {docs.length}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {saveMsg && (
-        <div style={{ padding: '8px 12px', borderRadius: 8, marginBottom: 16, fontSize: 12, fontWeight: 500, background: saveMsg.includes('Erreur') ? '#FEF2F2' : '#F0FDF4', color: saveMsg.includes('Erreur') ? '#DC2626' : '#16A34A', border: `1px solid ${saveMsg.includes('Erreur') ? '#FECACA' : '#BBF7D0'}` }}>
+        <div style={{ maxWidth: 800, margin: '0 auto 16px', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, background: saveMsg.includes('Erreur') ? '#FEF2F2' : '#F0FDF4', color: saveMsg.includes('Erreur') ? '#DC2626' : '#16A34A', border: `1px solid ${saveMsg.includes('Erreur') ? '#FECACA' : '#BBF7D0'}` }}>
           {saveMsg}
         </div>
       )}
 
       {/* ═══ TAB: Details ═══ */}
       {activeTab === 'details' && (
-        <div style={{ maxWidth: 680, margin: '0 auto' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 0 32px' }}>
+
+          {/* 2-column info grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {clientUser && (
-              <InfoRow icon={<User size={15} color="#3B82F6" />} label="Nom complet">
+              <GridCell icon={<User size={16} />} iconBg="#EFF6FF" iconColor="#3B82F6" label="Nom complet">
                 {editMode ? (
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
                     <input value={editFirst} onChange={e => setEditFirst(e.target.value)} placeholder="Prénom" style={INPUT_STYLE} />
                     <input value={editLast} onChange={e => setEditLast(e.target.value)} placeholder="Nom" style={INPUT_STYLE} />
                   </div>
-                ) : <p style={{ fontSize: 14, fontWeight: 500, color: '#111827' }}>{displayName}</p>}
-              </InfoRow>
+                ) : <p style={{ fontSize: 15, fontWeight: 500, color: '#111827', marginTop: 4 }}>{displayName}</p>}
+              </GridCell>
             )}
             {clientUser && (
-              <InfoRow icon={<Mail size={15} color="#3B82F6" />} label="Email">
-                <p style={{ fontSize: 14, fontWeight: 500, color: '#111827' }}>{clientUser.email}</p>
-              </InfoRow>
+              <GridCell icon={<Mail size={16} />} iconBg="#F5F3FF" iconColor="#7C3AED" label="Email">
+                <p style={{ fontSize: 15, fontWeight: 500, color: '#111827', marginTop: 4 }}>{clientUser.email}</p>
+              </GridCell>
             )}
             {clientUser && (
-              <InfoRow icon={<Phone size={15} color="#3B82F6" />} label="Téléphone">
+              <GridCell icon={<Phone size={16} />} iconBg="#F0FDF4" iconColor="#16A34A" label="Téléphone">
                 {editMode ? <input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="+212 6 00 00 00 00" style={INPUT_STYLE} />
-                  : <p style={{ fontSize: 14, fontWeight: 500, color: clientUser.phone_number ? '#111827' : '#9CA3AF' }}>{clientUser.phone_number ?? '—'}</p>}
-              </InfoRow>
+                  : <p style={{ fontSize: 15, fontWeight: 500, color: clientUser.phone_number ? '#111827' : '#9CA3AF', marginTop: 4 }}>{clientUser.phone_number ?? '—'}</p>}
+              </GridCell>
             )}
-            <InfoRow icon={<Building2 size={15} color="#3B82F6" />} label="Entreprise">
+            <GridCell icon={<Building2 size={16} />} iconBg="#FFF7ED" iconColor="#EA580C" label="Entreprise">
               {editMode ? <input value={editCompany} onChange={e => setEditCompany(e.target.value)} placeholder="Nom entreprise" style={INPUT_STYLE} />
-                : <p style={{ fontSize: 14, fontWeight: 500, color: '#111827' }}>{client.name}</p>}
-            </InfoRow>
-            <InfoRow icon={<Briefcase size={15} color="#3B82F6" />} label="Secteur d'activité">
+                : <p style={{ fontSize: 15, fontWeight: 500, color: '#111827', marginTop: 4 }}>{client.name}</p>}
+            </GridCell>
+            <GridCell icon={<Briefcase size={16} />} iconBg="#F0FDF4" iconColor="#0D9488" label="Secteur d'activité">
               {editMode ? (
                 <select value={editSecteur} onChange={e => setEditSecteur(e.target.value)} style={{ ...INPUT_STYLE, color: editSecteur ? '#111827' : '#9CA3AF' }}>
                   <option value="">— Non renseigné —</option>
                   {SECTEURS_ACTIVITE.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-              ) : <p style={{ fontSize: 14, fontWeight: 500, color: client.secteur_activite ? '#111827' : '#9CA3AF' }}>{client.secteur_activite ?? '—'}</p>}
-            </InfoRow>
-            <InfoRow icon={<FileText size={15} color="#3B82F6" />} label="Régime fiscal">
+              ) : <p style={{ fontSize: 15, fontWeight: 500, color: client.secteur_activite ? '#111827' : '#9CA3AF', marginTop: 4 }}>{client.secteur_activite ?? '—'}</p>}
+            </GridCell>
+            <GridCell icon={<FileText size={16} />} iconBg="#EFF6FF" iconColor="#3B82F6" label="Régime fiscal">
               {editMode ? (
                 <select value={editRegime} onChange={e => setEditRegime(e.target.value)} style={{ ...INPUT_STYLE, color: editRegime ? '#111827' : '#9CA3AF' }}>
                   <option value="">— Non renseigné —</option>
                   {REGIMES_FISCAUX.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
-              ) : <p style={{ fontSize: 14, fontWeight: 500, color: client.regime_fiscal ? '#111827' : '#9CA3AF' }}>{client.regime_fiscal ?? '—'}</p>}
-            </InfoRow>
-            <InfoRow icon={<Building2 size={15} color="#3B82F6" />} label="Forme juridique">
+              ) : <p style={{ fontSize: 15, fontWeight: 500, color: client.regime_fiscal ? '#111827' : '#9CA3AF', marginTop: 4 }}>{client.regime_fiscal ?? '—'}</p>}
+            </GridCell>
+            <GridCell icon={<Building2 size={16} />} iconBg="#FFF7ED" iconColor="#D97706" label="Forme juridique">
               {editMode ? (
                 <select value={editForme} onChange={e => setEditForme(e.target.value)} style={{ ...INPUT_STYLE, color: editForme ? '#111827' : '#9CA3AF' }}>
                   <option value="">— Non renseigné —</option>
                   {FORMES_JURIDIQUES.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
-              ) : <p style={{ fontSize: 14, fontWeight: 500, color: client.forme_juridique ? '#111827' : '#9CA3AF' }}>{client.forme_juridique ?? '—'}</p>}
-            </InfoRow>
-            <InfoRow icon={<Calendar size={15} color="#6B7280" />} label="Inscription">
-              <p style={{ fontSize: 14, fontWeight: 500, color: '#111827' }}>
+              ) : <p style={{ fontSize: 15, fontWeight: 500, color: client.forme_juridique ? '#111827' : '#9CA3AF', marginTop: 4 }}>{client.forme_juridique ?? '—'}</p>}
+            </GridCell>
+            <GridCell icon={<Calendar size={16} />} iconBg="#F9FAFB" iconColor="#6B7280" label="Inscription">
+              <p style={{ fontSize: 15, fontWeight: 500, color: '#111827', marginTop: 4 }}>
                 {new Date(client.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
-            </InfoRow>
+            </GridCell>
           </div>
 
-          {/* Fiscal IDs */}
-          {(client.ice || client.if_number || client.rc || client.tp || client.cnss || editMode) && (
-            <div style={{ marginTop: 20 }}>
-              <p style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Identifiants fiscaux</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {(['ice', 'if_number', 'rc', 'tp', 'cnss'] as const).map(field => {
+          {/* Fiscal IDs — collapsible */}
+          <div style={{ marginTop: 16, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
+            <button onClick={() => setFiscalOpen(v => !v)} style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '14px 20px',
+              background: '#F8FAFC', border: 'none', cursor: 'pointer', textAlign: 'left',
+            }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#374151', flex: 1 }}>
+                Identifiants fiscaux <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(Maroc)</span>
+              </span>
+              {fiscalOpen ? <ChevronUp size={15} color="#6B7280" /> : <ChevronDown size={15} color="#6B7280" />}
+            </button>
+            {fiscalOpen && (
+              <div>
+                {(['ice', 'if_number', 'rc', 'tp', 'cnss'] as const).map((field, i) => {
                   const labels: Record<string, string> = { ice: 'ICE', if_number: 'IF', rc: 'RC', tp: 'TP', cnss: 'CNSS' };
                   const val = (client as Record<string, unknown>)[field] as string | null | undefined;
-                  if (!editMode && !val) return null;
                   return (
-                    <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', minWidth: 36 }}>{labels[field]}</span>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: val ? '#111827' : '#9CA3AF', fontFamily: 'monospace' }}>{val ?? 'Non renseigné'}</span>
+                    <div key={field} style={{ display: 'flex', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid #F3F4F6' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', width: 48 }}>{labels[field]}</span>
+                      <span style={{ fontSize: 14, fontWeight: 500, color: val ? '#111827' : '#9CA3AF', fontFamily: val ? 'monospace' : 'inherit', fontStyle: val ? 'normal' : 'italic', flex: 1 }}>
+                        {val ?? 'Non renseigné'}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Edit / Save */}
           <div style={{ marginTop: 20, display: 'flex', gap: 8 }}>
@@ -373,7 +386,7 @@ export default function ClientDetailPage() {
 
       {/* ═══ TAB: Documents ═══ */}
       {activeTab === 'documents' && (
-        <div>
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111827' }}>Documents de {client.name}</h2>
             <span style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: '#EFF6FF', color: '#3B82F6' }}>
@@ -468,6 +481,20 @@ export default function ClientDetailPage() {
 }
 
 // ─── Small components ────────────────────────────────────────────────────────
+
+function GridCell({ icon, iconBg, iconColor, label, children }: {
+  icon: React.ReactNode; iconBg: string; iconColor: string; label: string; children: React.ReactNode;
+}) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '16px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+        <div style={{ height: 28, width: 28, borderRadius: 6, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor }}>{icon}</div>
+        <span style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 function InfoRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
