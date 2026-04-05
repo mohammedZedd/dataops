@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ChevronRight, ArrowLeft, FileText, Loader2, Download } from 'lucide-react';
+import { ChevronRight, ArrowLeft, FileText, Loader2, Download, Mic } from 'lucide-react';
 import { getInvoice, getClient, updateInvoice, validateInvoice } from '../api';
 import { getPresignedPreviewUrl, getPresignedDownloadUrl, extractDocumentData } from '../api/documents';
 import type { ExtractionResult } from '../api/documents';
+import apiClient from '../api/axios';
 import { InvoiceForm } from '../features/invoices/InvoiceForm';
 import { AccountingSection } from '../features/invoices/AccountingSection';
 import { StatusBadge } from '../components/ui/StatusBadge';
@@ -83,6 +84,11 @@ export default function DocumentDetailPage() {
   const [error,     setError]     = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Audio document state
+  const [isAudio,    setIsAudio]    = useState(false);
+  const [docMeta,    setDocMeta]    = useState<{ file_name: string; file_size: number | null; description: string | null } | null>(null);
+  const [audioUrl,   setAudioUrl]   = useState<string | null>(null);
+
   // Extraction state
   const [extraction,      setExtraction]      = useState<ExtractionResult | null>(null);
   const [extracting,      setExtracting]      = useState(false);
@@ -99,16 +105,29 @@ export default function DocumentDetailPage() {
     setError(null);
 
     Promise.all([getClient(clientId), getInvoice(invoiceId)])
-      .then(([c, inv]) => { setClient(c); setInvoice(inv); })
+      .then(async ([c, inv]) => {
+        setClient(c);
+        setInvoice(inv);
+        // Fetch document metadata to detect audio
+        try {
+          const { data: doc } = await apiClient.get(`/documents/${inv.document_id}`);
+          if (doc.doc_type === 'audio') {
+            setIsAudio(true);
+            setDocMeta({ file_name: doc.file_name, file_size: doc.file_size, description: doc.description });
+            const url = await getPresignedDownloadUrl(inv.document_id);
+            setAudioUrl(url);
+          }
+        } catch { /* ignore — not critical */ }
+      })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [clientId, invoiceId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Auto-extract on first load if form is empty
+  // Auto-extract on first load if form is empty (skip for audio)
   useEffect(() => {
-    if (!invoice || extractionRan.current || extracting) return;
+    if (!invoice || extractionRan.current || extracting || isAudio) return;
     const isEmpty = !invoice.invoice_number && !invoice.supplier_name
       && !invoice.date && invoice.total_amount === 0 && invoice.vat_amount === 0;
     if (!isEmpty) return;
@@ -198,6 +217,94 @@ export default function DocumentDetailPage() {
   }
 
   const displayName = invoice.supplier_name || invoice.invoice_number || 'Nouvelle facture';
+
+  // ─── Audio document viewer ─────────────────────────────────────────────────
+  if (isAudio) {
+    const fileName = docMeta?.file_name ?? 'Note vocale';
+    const fileSize = docMeta?.file_size;
+    const description = docMeta?.description;
+
+    async function handleAudioDownload() {
+      try {
+        const url = await getPresignedDownloadUrl(invoice!.document_id);
+        window.open(url, '_blank');
+      } catch { /* ignore */ }
+    }
+
+    return (
+      <>
+        <nav className="flex items-center gap-1.5 text-[12px] text-gray-400 mb-5">
+          <button onClick={() => navigate('/clients')} className="hover:text-gray-600 transition-colors">Clients</button>
+          <ChevronRight size={12} />
+          <button onClick={() => navigate(`/clients/${clientId}`)} className="hover:text-gray-600 transition-colors">{client.name}</button>
+          <ChevronRight size={12} />
+          <span className="text-gray-700 font-medium">Note vocale</span>
+        </nav>
+
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => navigate(-1)}
+            className="h-8 w-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors">
+            <ArrowLeft size={15} />
+          </button>
+          <h1 className="text-[18px] font-bold text-gray-900">Note vocale</h1>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold"
+            style={{ background: '#F5F3FF', color: '#7C3AED' }}>
+            <Mic size={13} /> Audio
+          </span>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 p-8 max-w-xl"
+          style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06)' }}>
+
+          <div className="flex items-center gap-4 mb-6">
+            <div className="h-12 w-12 rounded-full flex items-center justify-center"
+              style={{ background: '#F5F3FF' }}>
+              <Mic size={24} className="text-violet-500" />
+            </div>
+            <div>
+              <p className="text-[16px] font-semibold text-gray-900">{fileName}</p>
+              <p className="text-[13px] text-gray-500 mt-0.5">
+                {fileSize ? `${(fileSize / 1024).toFixed(1)} Ko` : '—'}
+                {' · '}
+                {new Date(invoice.date || Date.now()).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+          </div>
+
+          {description && (
+            <div className="rounded-lg p-4 mb-6"
+              style={{ background: '#F9FAFB', borderLeft: '3px solid #7C3AED' }}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Description</p>
+              <p className="text-[14px] text-gray-700">{description}</p>
+            </div>
+          )}
+
+          {audioUrl ? (
+            <audio controls className="w-full mb-6" src={audioUrl}>
+              Votre navigateur ne supporte pas la lecture audio.
+            </audio>
+          ) : (
+            <div className="flex items-center justify-center py-8 mb-6">
+              <Loader2 size={20} className="text-violet-500 animate-spin" />
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-5 border-t border-gray-100">
+            <button onClick={handleAudioDownload}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-medium rounded-lg transition-colors">
+              <Download size={14} /> Télécharger
+            </button>
+            <button onClick={() => navigate(-1)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+              <ArrowLeft size={14} /> Retour
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ─── Normal invoice view ───────────────────────────────────────────────────
 
   return (
     <>
