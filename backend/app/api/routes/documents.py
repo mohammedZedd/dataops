@@ -54,8 +54,12 @@ def _build_s3_key(user: User, filename: str) -> str:
 
 
 def _check_ownership(doc: Document, current_user: User) -> None:
-    if doc.uploaded_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Accès refusé.")
+    # Allow access if user uploaded the doc OR if it was sent to their client profile
+    if doc.uploaded_by_user_id == current_user.id:
+        return
+    if current_user.client_id and doc.client_id == current_user.client_id:
+        return
+    raise HTTPException(status_code=403, detail="Accès refusé.")
 
 
 # ─── Upload ───────────────────────────────────────────────────────────────────

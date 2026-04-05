@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, chat, clients, dashboard, documents, invoices, invitations, notifications, users
+from app.api.routes import auth, chat, clients, dashboard, documents, invoices, invitations, notes, notifications, users
 
 app = FastAPI(
     title="Payfit Accounting API",
@@ -27,6 +27,7 @@ app.include_router(dashboard.router)
 app.include_router(documents.router)
 app.include_router(invoices.router)
 app.include_router(invitations.router)
+app.include_router(notes.router)
 app.include_router(notifications.router)
 app.include_router(users.router)
 

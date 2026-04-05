@@ -22,6 +22,7 @@ class SendMessageRequest(BaseModel):
     file_name: Optional[str] = None
     file_url: Optional[str] = None
     document_id: Optional[str] = None
+    reply_to_id: Optional[str] = None
 
 
 def _conv_dict(conv: Conversation, last_msg: Message | None, unread: int, client: Client | None, client_user: User | None):
@@ -83,7 +84,19 @@ def get_messages(conv_id: str, db: Session = Depends(get_db), current_user: User
     db.execute(update(Message).where(Message.conversation_id == conv_id, Message.sender_id != current_user.id, Message.is_read == False).values(is_read=True))
     db.commit()
 
-    return {"messages": [{"id": m.id, "conversation_id": m.conversation_id, "sender_id": m.sender_id, "sender_role": m.sender_role, "content": m.content, "message_type": m.message_type, "file_name": m.file_name, "file_url": m.file_url, "document_id": m.document_id, "is_read": m.is_read, "created_at": m.created_at.isoformat()} for m in msgs]}
+    # Build reply_to lookup for messages that have replies
+    reply_ids = [m.reply_to_id for m in msgs if m.reply_to_id]
+    reply_map = {}
+    if reply_ids:
+        originals = db.scalars(select(Message).where(Message.id.in_(reply_ids))).all()
+        for o in originals:
+            reply_map[o.id] = {"id": o.id, "content": o.content, "file_name": o.file_name, "sender_role": o.sender_role}
+
+    def _msg_dict(m: Message):
+        d = {"id": m.id, "conversation_id": m.conversation_id, "sender_id": m.sender_id, "sender_role": m.sender_role, "content": m.content, "message_type": m.message_type, "file_name": m.file_name, "file_url": m.file_url, "document_id": m.document_id, "reply_to_id": m.reply_to_id, "reply_to": reply_map.get(m.reply_to_id) if m.reply_to_id else None, "is_read": m.is_read, "created_at": m.created_at.isoformat()}
+        return d
+
+    return {"messages": [_msg_dict(m) for m in msgs]}
 
 
 @router.post("/conversations/{conv_id}/messages")
@@ -94,7 +107,7 @@ def send_message(conv_id: str, payload: SendMessageRequest, db: Session = Depend
     if not payload.content.strip():
         raise HTTPException(status_code=400, detail="Message vide.")
 
-    msg = Message(conversation_id=conv_id, sender_id=current_user.id, sender_role=current_user.role.value if hasattr(current_user.role, 'value') else current_user.role, content=payload.content.strip(), message_type=payload.message_type, file_name=payload.file_name, file_url=payload.file_url, document_id=payload.document_id)
+    msg = Message(conversation_id=conv_id, sender_id=current_user.id, sender_role=current_user.role.value if hasattr(current_user.role, 'value') else current_user.role, content=payload.content.strip(), message_type=payload.message_type, file_name=payload.file_name, file_url=payload.file_url, document_id=payload.document_id, reply_to_id=payload.reply_to_id)
     db.add(msg)
     conv.last_message_at = datetime.utcnow()
     db.commit()
@@ -110,7 +123,14 @@ def send_message(conv_id: str, payload: SendMessageRequest, db: Session = Depend
         db.add(NotifModel(company_id=conv.company_id, recipient_id=conv.client_user_id, type="new_message", title=title, message=msg.content[:80], link="/client/messages"))
         db.commit()
 
-    return {"id": msg.id, "conversation_id": msg.conversation_id, "sender_id": msg.sender_id, "sender_role": msg.sender_role, "content": msg.content, "message_type": msg.message_type, "file_name": msg.file_name, "file_url": msg.file_url, "document_id": msg.document_id, "is_read": msg.is_read, "created_at": msg.created_at.isoformat()}
+    # Build reply_to for response
+    reply_to = None
+    if msg.reply_to_id:
+        original = db.get(Message, msg.reply_to_id)
+        if original:
+            reply_to = {"id": original.id, "content": original.content, "file_name": original.file_name, "sender_role": original.sender_role}
+
+    return {"id": msg.id, "conversation_id": msg.conversation_id, "sender_id": msg.sender_id, "sender_role": msg.sender_role, "content": msg.content, "message_type": msg.message_type, "file_name": msg.file_name, "file_url": msg.file_url, "document_id": msg.document_id, "reply_to_id": msg.reply_to_id, "reply_to": reply_to, "is_read": msg.is_read, "created_at": msg.created_at.isoformat()}
 
 
 @router.get("/unread-count")

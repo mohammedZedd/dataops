@@ -4,8 +4,9 @@ import {
   ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Calendar,
   User, Mail, Phone, Building2, Briefcase, FileText, ImageIcon,
   FileSpreadsheet, File as FileIcon, FolderOpen, Download,
-  Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X,
+  Pencil, ClipboardList, Loader2, Eye, Ban, RefreshCw, Mic, X, StickyNote, Pin, Trash2, Plus,
 } from 'lucide-react';
+import apiClient from '../api/axios';
 import { getClient, getClientUsers, updateClientUser, revokeClientAccess, restoreClientAccess } from '../api/clients';
 import { getClientDocuments, getPresignedDownloadUrl, getPresignedPreviewUrl, createInvoiceFromDocument, uploadDocument, markDocumentViewed } from '../api/documents';
 import type { AdminClientDoc } from '../api/documents';
@@ -111,6 +112,15 @@ export default function ClientDetailPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+
+  // Notes
+  interface NoteAuthor { id: string | null; name: string; initials: string }
+  interface Note { id: string; title: string | null; content: string; color: string; is_pinned: boolean; created_at: string; updated_at: string; author: NoteAuthor }
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [showNewNoteForm, setShowNewNoteForm] = useState(false);
+  const [newNoteTitle, setNewNoteTitle] = useState('');
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [newNoteColor, setNewNoteColor] = useState('yellow');
 
   const fetchData = useCallback(async () => {
     if (!clientId) { setError('ID manquant.'); setLoading(false); return; }
@@ -220,6 +230,48 @@ export default function ClientDetailPage() {
     try { const url = await getPresignedDownloadUrl(docId); setPlayingId(docId); setPlayingUrl(url); } catch { /* */ }
   }
 
+  // ─── Notes ─────────────────────────────────────────────────────────────────
+
+  const fetchNotes = useCallback(async () => {
+    if (!clientId) return;
+    try { const { data } = await apiClient.get(`/clients/${clientId}/notes`); setNotes(data); } catch { /* */ }
+  }, [clientId]);
+
+  useEffect(() => { if (activeTab === 'notes') fetchNotes(); }, [activeTab, fetchNotes]);
+
+  async function handleCreateNote() {
+    if (!newNoteContent.trim() || !clientId) return;
+    try {
+      const { data } = await apiClient.post(`/clients/${clientId}/notes`, { title: newNoteTitle, content: newNoteContent, color: newNoteColor });
+      setNotes(prev => [data, ...prev]);
+      setShowNewNoteForm(false); setNewNoteTitle(''); setNewNoteContent(''); setNewNoteColor('yellow');
+    } catch { /* */ }
+  }
+
+  async function handleUpdateNote(noteId: string, updates: { title?: string; content?: string; color?: string }) {
+    if (!clientId) return;
+    try {
+      const { data } = await apiClient.patch(`/clients/${clientId}/notes/${noteId}`, updates);
+      setNotes(prev => prev.map(n => n.id === noteId ? { ...n, ...data } : n));
+    } catch { /* */ }
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    if (!confirm('Supprimer cette note ?')) return;
+    try {
+      await apiClient.delete(`/clients/${clientId}/notes/${noteId}`);
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+    } catch { /* */ }
+  }
+
+  async function handleTogglePin(noteId: string) {
+    if (!clientId) return;
+    try {
+      const { data } = await apiClient.patch(`/clients/${clientId}/notes/${noteId}/pin`);
+      setNotes(prev => prev.map(n => n.id === noteId ? { ...n, is_pinned: data.is_pinned } : n).sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned)));
+    } catch { /* */ }
+  }
+
   // ─── Loading / Error ───────────────────────────────────────────────────────
 
   if (loading) return <div className="flex items-center justify-center py-24"><Loader2 size={24} className="text-blue-500 animate-spin" /></div>;
@@ -274,21 +326,30 @@ export default function ClientDetailPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '2px solid #F3F4F6', marginBottom: 28 }}>
-        {(['details', 'documents'] as const).map((tab, i) => (
-          <div key={tab} style={{ display: 'contents' }}>
+        {[
+          { key: 'details', label: 'Détails du client', icon: <User size={16} /> },
+          { key: 'documents', label: 'Documents', icon: <FileText size={16} /> },
+          { key: 'notes', label: 'Notes', icon: <StickyNote size={16} /> },
+        ].map((tab, i) => (
+          <div key={tab.key} style={{ display: 'contents' }}>
           {i > 0 && <div style={{ width: 1, height: 20, background: '#E5E7EB', margin: '0 4px', flexShrink: 0 }} />}
-          <button onClick={() => switchTab(tab)} style={{
-            padding: '14px 20px', fontSize: 14, fontWeight: activeTab === tab ? 600 : 400,
-            color: activeTab === tab ? '#3B82F6' : '#6B7280',
-            borderBottom: activeTab === tab ? '2px solid #3B82F6' : '2px solid transparent',
+          <button onClick={() => switchTab(tab.key)} style={{
+            padding: '14px 20px', fontSize: 14, fontWeight: activeTab === tab.key ? 600 : 400,
+            color: activeTab === tab.key ? '#3B82F6' : '#6B7280',
+            borderBottom: activeTab === tab.key ? '2px solid #3B82F6' : '2px solid transparent',
             marginBottom: -2, background: 'none', border: 'none', borderBottomStyle: 'solid',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 0.15s',
           }}>
-            {tab === 'details' ? <User size={16} /> : <FileText size={16} />}
-            {tab === 'details' ? 'Détails du client' : 'Documents'}
-            {tab === 'documents' && (
+            {tab.icon}
+            {tab.label}
+            {tab.key === 'documents' && (
               <span style={{ fontSize: 12, padding: '1px 8px', borderRadius: 20, background: '#EFF6FF', color: '#3B82F6', fontWeight: 600, marginLeft: 2 }}>
                 {docs.length}
+              </span>
+            )}
+            {tab.key === 'notes' && notes.length > 0 && (
+              <span style={{ fontSize: 12, padding: '1px 8px', borderRadius: 20, background: '#FFF7ED', color: '#C2410C', fontWeight: 600, marginLeft: 2 }}>
+                {notes.length}
               </span>
             )}
           </button>
@@ -583,6 +644,55 @@ export default function ClientDetailPage() {
         </div>
       )}
 
+      {/* ═══ TAB: Notes ═══ */}
+      {activeTab === 'notes' && (
+        <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 0 32px' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#111827' }}>Notes</h2>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7280' }}>Notes privées sur {client.name} — visibles uniquement par votre cabinet</p>
+            </div>
+            <button onClick={() => setShowNewNoteForm(true)} style={{ padding: '10px 20px', background: '#F59E0B', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={16} /> Nouvelle note
+            </button>
+          </div>
+
+          {/* New note form */}
+          {showNewNoteForm && (
+            <div style={{ background: getNoteColor(newNoteColor).bg, border: `1px solid ${getNoteColor(newNoteColor).border}`, borderRadius: 14, padding: '16px 20px', marginBottom: 20, borderLeft: `4px solid ${getNoteColor(newNoteColor).accent}` }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                {(['yellow', 'blue', 'green', 'pink', 'gray'] as const).map(c => (
+                  <button key={c} onClick={() => setNewNoteColor(c)} style={{ width: 20, height: 20, borderRadius: '50%', background: getNoteColor(c).accent, border: newNoteColor === c ? '2px solid #111827' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
+                ))}
+              </div>
+              <input value={newNoteTitle} onChange={e => setNewNoteTitle(e.target.value)} placeholder="Titre (optionnel)" style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 15, fontWeight: 600, color: '#111827', outline: 'none', marginBottom: 8, boxSizing: 'border-box' }} />
+              <textarea value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)} placeholder="Écrivez votre note ici..." autoFocus rows={4} style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 14, color: '#374151', outline: 'none', resize: 'none', lineHeight: 1.6, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                <button onClick={() => { setShowNewNoteForm(false); setNewNoteTitle(''); setNewNoteContent(''); setNewNoteColor('yellow'); }} style={{ padding: '7px 14px', background: 'white', border: '1px solid #E5E7EB', color: '#6B7280', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Annuler</button>
+                <button onClick={handleCreateNote} disabled={!newNoteContent.trim()} style={{ padding: '7px 16px', background: newNoteContent.trim() ? '#F59E0B' : '#E5E7EB', color: newNoteContent.trim() ? 'white' : '#9CA3AF', border: 'none', borderRadius: 8, cursor: newNoteContent.trim() ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 13 }}>Enregistrer</button>
+              </div>
+            </div>
+          )}
+
+          {/* Notes grid */}
+          {notes.length === 0 && !showNewNoteForm ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF' }}>
+              <div style={{ height: 56, width: 56, borderRadius: '50%', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><StickyNote size={26} color="#F59E0B" /></div>
+              <div style={{ fontWeight: 500, color: '#374151', fontSize: 16 }}>Aucune note pour ce client</div>
+              <div style={{ fontSize: 13, marginTop: 6 }}>Ajoutez des notes, rappels ou observations sur ce client</div>
+              <button onClick={() => setShowNewNoteForm(true)} style={{ marginTop: 16, padding: '10px 24px', background: '#F59E0B', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={16} /> Créer la première note</button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+              {notes.map(note => (
+                <NoteCard key={note.id} note={note} onUpdate={handleUpdateNote} onDelete={handleDeleteNote} onPin={handleTogglePin} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Limit access confirmation modal */}
       {showLimitModal && (
         <>
@@ -662,5 +772,95 @@ function IconBtn({ onClick, title, disabled, active, color, bgHover, children }:
       onMouseLeave={e => { if (!disabled && !active) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = color || '#9CA3AF'; } }}>
       {children}
     </button>
+  );
+}
+
+// ─── Note helpers ───────���────────────────────────────────────────────────────
+
+function getNoteColor(color: string) {
+  const colors: Record<string, { bg: string; border: string; accent: string }> = {
+    yellow: { bg: '#FFFBEB', border: '#FDE68A', accent: '#F59E0B' },
+    blue:   { bg: '#EFF6FF', border: '#BFDBFE', accent: '#3B82F6' },
+    green:  { bg: '#F0FDF4', border: '#BBF7D0', accent: '#16A34A' },
+    pink:   { bg: '#FDF2F8', border: '#F9A8D4', accent: '#EC4899' },
+    gray:   { bg: '#F9FAFB', border: '#E5E7EB', accent: '#6B7280' },
+  };
+  return colors[color] || colors.yellow;
+}
+
+function formatNoteTime(iso: string) {
+  const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'));
+  const now = new Date();
+  const diff = (now.getTime() - d.getTime()) / 1000;
+  if (diff < 60) return "À l'instant";
+  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)}h`;
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+
+interface NoteCardProps {
+  note: { id: string; title: string | null; content: string; color: string; is_pinned: boolean; updated_at: string; author: { id: string | null; name: string; initials: string } };
+  onUpdate: (id: string, data: { title?: string; content?: string; color?: string }) => void;
+  onDelete: (id: string) => void;
+  onPin: (id: string) => void;
+}
+
+function NoteCard({ note, onUpdate, onDelete, onPin }: NoteCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(note.title ?? '');
+  const [editContent, setEditContent] = useState(note.content);
+  const [showActions, setShowActions] = useState(false);
+  const colors = getNoteColor(note.color);
+
+  return (
+    <div
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+      style={{ background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 14, padding: '16px 18px', borderLeft: `4px solid ${colors.accent}`, position: 'relative', transition: 'box-shadow 0.2s', boxShadow: showActions ? '0 4px 16px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.04)', minHeight: 120 }}>
+      {/* Pin indicator */}
+      {note.is_pinned && !showActions && <div style={{ position: 'absolute', top: 10, right: 10, color: '#F59E0B' }}><Pin size={14} fill="#F59E0B" /></div>}
+
+      {/* Actions on hover */}
+      {showActions && !isEditing && (
+        <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
+          <button onClick={() => onPin(note.id)} title={note.is_pinned ? 'Désépingler' : 'Épingler'} style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: note.is_pinned ? '#F59E0B' : '#9CA3AF', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Pin size={13} /></button>
+          <button onClick={() => { setEditTitle(note.title ?? ''); setEditContent(note.content); setIsEditing(true); }} title="Modifier" style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Pencil size={13} /></button>
+          <button onClick={() => onDelete(note.id)} title="Supprimer" style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><Trash2 size={13} /></button>
+        </div>
+      )}
+
+      {isEditing ? (
+        <>
+          {/* Color picker in edit mode */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            {(['yellow', 'blue', 'green', 'pink', 'gray'] as const).map(c => (
+              <button key={c} onClick={() => onUpdate(note.id, { color: c })} style={{ width: 16, height: 16, borderRadius: '50%', background: getNoteColor(c).accent, border: note.color === c ? '2px solid #111827' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
+            ))}
+          </div>
+          <input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Titre" style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 14, fontWeight: 600, outline: 'none', marginBottom: 6, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+          <textarea value={editContent} onChange={e => setEditContent(e.target.value)} autoFocus style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 13, resize: 'none', outline: 'none', lineHeight: 1.6, minHeight: 80, boxSizing: 'border-box', fontFamily: 'inherit', color: '#374151' }} />
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
+            <button onClick={() => setIsEditing(false)} style={{ padding: '4px 10px', fontSize: 12, background: 'white', border: '1px solid #E5E7EB', borderRadius: 6, cursor: 'pointer' }}>Annuler</button>
+            <button onClick={() => { onUpdate(note.id, { title: editTitle, content: editContent }); setIsEditing(false); }} style={{ padding: '4px 10px', fontSize: 12, background: colors.accent, color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Sauvegarder</button>
+          </div>
+        </>
+      ) : (
+        <>
+          {note.title && <div style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 6, paddingRight: note.is_pinned ? 20 : 0 }}>{note.title}</div>}
+          <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{note.content}</div>
+        </>
+      )}
+
+      {/* Footer */}
+      <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#9CA3AF' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {note.author?.initials && (
+            <span style={{ background: colors.accent, color: 'white', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>{note.author.initials}</span>
+          )}
+          {note.author?.name}
+        </span>
+        <span>{formatNoteTime(note.updated_at)}</span>
+      </div>
+    </div>
   );
 }
