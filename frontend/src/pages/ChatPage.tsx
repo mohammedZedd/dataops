@@ -3,11 +3,10 @@ import { useSearchParams } from 'react-router-dom';
 import { MessageSquare, Send } from 'lucide-react';
 import apiClient from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { formatTimeAgo as timeAgo } from '../utils/dateUtils';
 
 interface Conv { id: string; client_name: string | null; client_company: string | null; status: string; last_message: { content: string; sender_role: string; created_at: string } | null; unread_count: number; last_message_at: string | null }
 interface Msg { id: string; sender_id: string; sender_role: string; content: string; is_read: boolean; created_at: string }
-
-function timeAgo(d: string) { const ms = Date.now() - new Date(d).getTime(); if (ms < 60000) return "À l'instant"; if (ms < 3600000) return `${Math.floor(ms / 60000)} min`; if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`; return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); }
 
 export default function ChatPage() {
   const { user } = useAuth();

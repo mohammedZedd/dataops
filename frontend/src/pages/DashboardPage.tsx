@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, FileText, CheckCircle2, Clock, AlertTriangle, ArrowRight, RefreshCw } from 'lucide-react';
 import apiClient from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { formatTimeAgo as timeAgo } from '../utils/dateUtils';
 
 interface Stats {
   period: { month: string; label: string };
@@ -14,7 +15,6 @@ interface Stats {
   invoices_to_validate: { id: string; invoice_number: string; supplier_name: string; total_amount: number; client_name: string; direction: string }[];
 }
 
-function timeAgo(d: string) { const ms = Date.now() - new Date(d).getTime(); if (ms < 3600000) return `${Math.max(1, Math.floor(ms / 60000))} min`; if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`; return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }); }
 function greeting() { const h = new Date().getHours(); if (h < 12) return 'Bonjour'; if (h < 18) return 'Bon après-midi'; return 'Bonsoir'; }
 
 export default function DashboardPage() {

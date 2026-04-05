@@ -5,6 +5,7 @@ import {
   FileSpreadsheet, Mic, Eye, ClipboardList, Download, X, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { getAllDocuments, getDocumentStats, getDocumentsByClientSummary, getPresignedPreviewUrl, getPresignedDownloadUrl, createInvoiceFromDocument, markDocumentViewed } from '../api/documents';
+import { formatRelDate as relDate } from '../utils/dateUtils';
 import type { DocumentStats, ClientDocSummary, AdminClientDoc } from '../api/documents';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -34,13 +35,7 @@ function formatSize(b: number | null) {
   return `${(b / 1048576).toFixed(1)} Mo`;
 }
 
-function relDate(d: string) {
-  const diff = Date.now() - new Date(d).getTime();
-  if (diff < 3600000) return `Il y a ${Math.max(1, Math.floor(diff / 60000))} min`;
-  if (diff < 86400000) return `Il y a ${Math.floor(diff / 3600000)}h`;
-  if (diff < 604800000) return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-  return new Date(d).toLocaleDateString('fr-FR');
-}
+// relDate imported from utils/dateUtils
 
 function highlight(text: string, q: string) {
   if (!q) return <>{text}</>;

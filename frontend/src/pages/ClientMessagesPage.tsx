@@ -3,16 +3,9 @@ import { Send } from 'lucide-react';
 import apiClient from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { soundService } from '../utils/soundService';
+import { formatTimeAgo as timeAgo } from '../utils/dateUtils';
 
 interface Msg { id: string; sender_id: string; sender_role: string; content: string; is_read: boolean; created_at: string }
-
-function timeAgo(d: string) {
-  const ms = Date.now() - new Date(d).getTime();
-  if (ms < 60000) return "À l'instant";
-  if (ms < 3600000) return `${Math.floor(ms / 60000)} min`;
-  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`;
-  return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
 
 export default function ClientMessagesPage() {
   const { user } = useAuth();
