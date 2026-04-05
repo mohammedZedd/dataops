@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Loader2, FolderOpen, AlertTriangle, FileText, ImageIcon,
   FileSpreadsheet, Mic, Eye, ClipboardList, Download, X, ChevronLeft, ChevronRight,
@@ -75,7 +75,12 @@ type Statut = typeof STATUT_PILLS[number];
 
 export default function DocumentsPage() {
   const navigate = useNavigate();
+  const [urlParams] = useSearchParams();
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Read initial filters from URL params (from dashboard navigation)
+  const initStatus = (urlParams.get('status') as Statut) || 'Tous';
+  const initPeriod = urlParams.get('period') as typeof periodFilter | null;
 
   const [docs, setDocs] = useState<AdminClientDoc[]>([]);
   const [stats, setStats] = useState<DocumentStats | null>(null);
@@ -85,9 +90,9 @@ export default function DocumentsPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [showSugg, setShowSugg] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<Statut>('Tous');
+  const [statusFilter, setStatusFilter] = useState<Statut>(STATUT_PILLS.includes(initStatus as any) ? initStatus : 'Tous');
   const [typeFilter, setTypeFilter] = useState('');
-  const [periodFilter, setPeriodFilter] = useState<'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'all' | 'custom'>('this_month');
+  const [periodFilter, setPeriodFilter] = useState<'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'all' | 'custom'>(initPeriod && ['this_month', 'last_month', 'this_quarter', 'this_year', 'all'].includes(initPeriod) ? initPeriod : 'this_month');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
