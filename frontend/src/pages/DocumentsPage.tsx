@@ -87,6 +87,9 @@ export default function DocumentsPage() {
   const [showSugg, setShowSugg] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Statut>('Tous');
   const [typeFilter, setTypeFilter] = useState('');
+  const [periodFilter, setPeriodFilter] = useState<'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'all' | 'custom'>('this_month');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -113,11 +116,36 @@ export default function DocumentsPage() {
   }, []);
 
   // Reset page on filter change
-  useEffect(() => { setPage(1); }, [search, statusFilter, typeFilter]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, typeFilter, periodFilter, dateFrom, dateTo]);
 
   // Suggestions
   const clientSugg = search.length >= 1 ? clientSummaries.filter(c => c.client.full_name.toLowerCase().includes(search.toLowerCase()) || c.client.name.toLowerCase().includes(search.toLowerCase())).slice(0, 4) : [];
   const fileSugg = search.length >= 2 ? docs.filter(d => d.file_name.toLowerCase().includes(search.toLowerCase())).slice(0, 3) : [];
+
+  // Date range helper
+  function getDateRange() {
+    const now = new Date();
+    switch (periodFilter) {
+      case 'this_month': return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: new Date(now.getFullYear(), now.getMonth() + 1, 0) };
+      case 'last_month': return { from: new Date(now.getFullYear(), now.getMonth() - 1, 1), to: new Date(now.getFullYear(), now.getMonth(), 0) };
+      case 'this_quarter': { const q = Math.floor(now.getMonth() / 3); return { from: new Date(now.getFullYear(), q * 3, 1), to: new Date(now.getFullYear(), q * 3 + 3, 0) }; }
+      case 'this_year': return { from: new Date(now.getFullYear(), 0, 1), to: new Date(now.getFullYear(), 11, 31) };
+      case 'custom': return { from: dateFrom ? new Date(dateFrom) : null, to: dateTo ? new Date(dateTo) : null };
+      default: return { from: null, to: null };
+    }
+  }
+
+  function getPeriodLabel() {
+    const now = new Date();
+    switch (periodFilter) {
+      case 'this_month': return now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      case 'last_month': { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); }
+      case 'this_quarter': return `T${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()}`;
+      case 'this_year': return String(now.getFullYear());
+      case 'all': return "tout l'historique";
+      case 'custom': return dateFrom && dateTo ? `${new Date(dateFrom).toLocaleDateString('fr-FR')} → ${new Date(dateTo).toLocaleDateString('fr-FR')}` : 'période personnalisée';
+    }
+  }
 
   // Filtered docs
   const filtered = docs.filter(d => {
@@ -129,13 +157,18 @@ export default function DocumentsPage() {
     if (statusFilter === 'En attente' && d.invoice_status && d.invoice_status !== 'to_review') return false;
     if (statusFilter === 'Validé' && d.invoice_status !== 'validated') return false;
     if (statusFilter === 'Rejeté' && d.invoice_status !== 'rejected') return false;
+    // Date filter
+    const range = getDateRange();
+    const docDate = new Date(d.uploaded_at);
+    if (range.from && docDate < range.from) return false;
+    if (range.to) { const end = new Date(range.to); end.setHours(23, 59, 59, 999); if (docDate > end) return false; }
     return true;
   });
 
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const paged = filtered.slice((page - 1) * perPage, page * perPage);
-  const hasFilters = search || statusFilter !== 'Tous' || typeFilter;
+  const hasFilters = search || statusFilter !== 'Tous' || typeFilter || periodFilter !== 'this_month';
   const urgentClients = clientSummaries.filter(c => c.urgent_count > 0);
 
   async function handlePreview(id: string) { try { window.open(await getPresignedPreviewUrl(id), '_blank'); } catch { /* */ } }
@@ -249,12 +282,35 @@ export default function DocumentsPage() {
           <option value="excel">Excel</option>
         </select>
 
-        {hasFilters && <button onClick={() => { setSearch(''); setStatusFilter('Tous'); setTypeFilter(''); }} style={{ fontSize: 12, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Réinitialiser</button>}
+        {hasFilters && <button onClick={() => { setSearch(''); setStatusFilter('Tous'); setTypeFilter(''); setPeriodFilter('this_month'); setDateFrom(''); setDateTo(''); }} style={{ fontSize: 12, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Réinitialiser</button>}
+
+        {/* Period pills */}
+        <div style={{ width: '100%', display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+          {([['this_month', 'Ce mois'], ['last_month', 'Mois dernier'], ['this_quarter', 'Ce trimestre'], ['this_year', 'Cette année'], ['all', 'Tout'], ['custom', 'Personnalisé']] as const).map(([key, label]) => (
+            <button key={key} onClick={() => { setPeriodFilter(key as typeof periodFilter); if (key !== 'custom') { setDateFrom(''); setDateTo(''); } }}
+              style={{ padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: periodFilter === key ? 600 : 400, border: periodFilter === key ? 'none' : '1px solid #E5E7EB', background: periodFilter === key ? '#3B82F6' : '#fff', color: periodFilter === key ? '#fff' : '#6B7280', cursor: 'pointer', transition: 'all 0.15s' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom date range */}
+        {periodFilter === 'custom' && (
+          <div style={{ width: '100%', display: 'flex', gap: 12, marginTop: 4, alignItems: 'center' }}>
+            <span style={{ fontSize: 13, color: '#6B7280' }}>Du</span>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={dateTo || undefined}
+              style={{ height: 36, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 10px', fontSize: 13, color: '#374151', outline: 'none' }} />
+            <span style={{ fontSize: 13, color: '#6B7280' }}>Au</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom || undefined}
+              style={{ height: 36, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 10px', fontSize: 13, color: '#374151', outline: 'none' }} />
+            {(dateFrom || dateTo) && <button onClick={() => { setDateFrom(''); setDateTo(''); }} style={{ fontSize: 12, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Effacer</button>}
+          </div>
+        )}
       </div>
 
       {/* Results bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0 12px' }}>
-        <span style={{ fontSize: 13, color: '#6B7280' }}>{total} document{total !== 1 ? 's' : ''} trouvé{total !== 1 ? 's' : ''}{search && ` pour « ${search} »`}</span>
+        <span style={{ fontSize: 13, color: '#6B7280' }}>{total} document{total !== 1 ? 's' : ''} · {getPeriodLabel()}{search && ` · « ${search} »`}</span>
       </div>
 
       {/* Table */}
