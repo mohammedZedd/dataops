@@ -72,6 +72,12 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if getattr(current_user, 'access_level', 'full') == 'readonly':
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Votre accès est en lecture seule. Vous ne pouvez plus envoyer de documents. Contactez votre cabinet comptable.",
+        )
+
     if file.content_type not in _ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail="Type non autorisé. PDF, JPG, PNG, XLSX, ou audio acceptés.")
 

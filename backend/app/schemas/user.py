@@ -29,6 +29,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     phone_number: Optional[str] = None
     is_active: Optional[bool] = None
+    access_level: Optional[str] = None       # full | readonly | blocked
     company_name: Optional[str] = None       # met à jour Client.name
     secteur_activite: Optional[str] = None   # met à jour Client.secteur_activite
     regime_fiscal: Optional[str] = None      # met à jour Client.regime_fiscal
@@ -62,6 +63,7 @@ class UserRead(BaseModel):
     client_id: Optional[str] = None
     client_company_name: Optional[str] = None
     phone_number: Optional[str] = None
+    access_level: str = "full"
     created_at: datetime
 
     @model_validator(mode='before')
@@ -81,6 +83,7 @@ class UserRead(BaseModel):
                 'client_id': data.client_id,
                 'client_company_name': None,  # populated at route level
                 'phone_number': getattr(data, 'phone_number', None),
+                'access_level': getattr(data, 'access_level', 'full'),
                 'created_at': data.created_at,
             }
         return data

@@ -25,6 +25,7 @@ class Client(Base):
     tp: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     cnss: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    access_level: Mapped[str] = mapped_column(String(20), default="full", server_default="full", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

@@ -2,6 +2,8 @@
 
 export type UserRole = 'admin' | 'accountant' | 'client';
 
+export type AccessLevel = 'full' | 'readonly' | 'blocked';
+
 export interface User {
   id: string;
   first_name: string;
@@ -13,6 +15,7 @@ export interface User {
   client_id?: string | null;
   client_company_name?: string | null;
   phone_number?: string | null;
+  access_level?: AccessLevel;
   created_at: string;
 }
 

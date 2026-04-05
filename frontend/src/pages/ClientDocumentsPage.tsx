@@ -5,6 +5,7 @@ import {
   RotateCcw, Play, Pause,
 } from 'lucide-react';
 import { getMyDocuments, uploadDocument, getPresignedDownloadUrl, getPresignedPreviewUrl, deleteDocument } from '../api/documents';
+import { useAuth } from '../context/AuthContext';
 import type { ClientDocument } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -74,6 +75,9 @@ const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|Android/i.test
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ClientDocumentsPage() {
+  const { user } = useAuth();
+  const isReadOnly = user?.access_level === 'readonly';
+
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -384,7 +388,22 @@ export default function ClientDocumentsPage() {
         <p className="text-sm text-gray-500 mt-0.5">Déposez vos fichiers pour les transmettre à votre cabinet comptable.</p>
       </div>
 
+      {/* Readonly banner */}
+      {isReadOnly && (
+        <div className="flex items-start gap-3 px-4 py-4 rounded-lg" style={{ background: '#FFFBEB', border: '1px solid #FCD34D' }}>
+          <span className="text-[18px] flex-shrink-0 mt-0.5">&#9888;&#65039;</span>
+          <div>
+            <p className="text-[14px] font-semibold" style={{ color: '#92400E' }}>Votre accès a été limité</p>
+            <p className="text-[13px] mt-1" style={{ color: '#92400E' }}>
+              Vous pouvez consulter vos documents existants mais vous ne pouvez plus en envoyer de nouveaux.
+              Pour plus d'informations, contactez votre cabinet comptable.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ═══ Upload zone — 3 tabs ═══ */}
+      {!isReadOnly && (
       <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
         <p className="text-sm font-medium text-gray-700">Ajouter un document</p>
 
@@ -568,6 +587,7 @@ export default function ClientDocumentsPage() {
           {uploading ? 'Envoi en cours…' : 'Envoyer'}
         </button>
       </div>
+      )}
 
       {/* ═══ Documents list ═══ */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -620,7 +640,7 @@ export default function ClientDocumentsPage() {
                         <button onClick={() => handleDownload(doc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Télécharger">
                           <Download size={14} />
                         </button>
-                        <button onClick={() => { closePreview(); setDeleteModal({ open: true, doc }); }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Supprimer">
+                        <button onClick={() => { if (!isReadOnly) { closePreview(); setDeleteModal({ open: true, doc }); } }} disabled={isReadOnly} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title={isReadOnly ? 'Action non disponible' : 'Supprimer'}>
                           <Trash2 size={14} />
                         </button>
                       </div>

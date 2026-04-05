@@ -51,6 +51,8 @@ def update_user(
                 client.forme_juridique = forme_juridique
             if "is_active" in payload.model_dump(exclude_none=True):
                 client.is_active = target.is_active
+            if "access_level" in payload.model_dump(exclude_none=True):
+                client.access_level = target.access_level
 
     db.commit()
     db.refresh(target)

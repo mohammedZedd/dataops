@@ -38,17 +38,19 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou mot de passe incorrect.",
         )
-    if not user.is_active:
+    # Block fully deactivated accounts
+    if not user.is_active or getattr(user, 'access_level', 'full') == 'blocked':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Votre accès a été révoqué. Contactez votre cabinet comptable.",
+            detail="Votre compte a été désactivé. Contactez votre cabinet comptable.",
         )
+    # Readonly users CAN login — no block here
     if user.client_id:
         client = db.get(Client, user.client_id)
-        if client and not client.is_active:
+        if client and not client.is_active and getattr(client, 'access_level', 'full') == 'blocked':
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Votre accès a été révoqué. Contactez votre cabinet comptable.",
+                detail="Votre compte a été désactivé. Contactez votre cabinet comptable.",
             )
     token = create_access_token(user.id)
     return TokenResponse(access_token=token, user=UserRead.model_validate(user))

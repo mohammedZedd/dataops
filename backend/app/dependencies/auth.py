@@ -33,7 +33,8 @@ def get_current_user(
             detail="Utilisateur introuvable.",
         )
 
-    if not user.is_active:
+    # Block fully deactivated users (blocked access_level or is_active=False)
+    if getattr(user, 'access_level', 'full') == 'blocked' or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Accès révoqué.",
@@ -41,7 +42,7 @@ def get_current_user(
 
     if user.client_id:
         client = db.get(Client, user.client_id)
-        if client and not client.is_active:
+        if client and (getattr(client, 'access_level', 'full') == 'blocked' or not client.is_active):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Accès révoqué.",

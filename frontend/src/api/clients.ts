@@ -69,10 +69,19 @@ export async function deleteClient(id: string): Promise<void> {
 
 export async function revokeClientAccess(userId: string): Promise<void> {
   try {
-    await apiClient.patch(`/users/${userId}`, { is_active: false });
+    await apiClient.patch(`/users/${userId}`, { access_level: 'readonly' });
   } catch (error) {
     console.error(`[clients] revokeClientAccess(${userId}) :`, error);
-    throw new Error("Impossible de révoquer l'accès du client.");
+    throw new Error("Impossible de limiter l'accès du client.");
+  }
+}
+
+export async function restoreClientAccess(userId: string): Promise<void> {
+  try {
+    await apiClient.patch(`/users/${userId}`, { access_level: 'full', is_active: true });
+  } catch (error) {
+    console.error(`[clients] restoreClientAccess(${userId}) :`, error);
+    throw new Error("Impossible de restaurer l'accès du client.");
   }
 }
 
