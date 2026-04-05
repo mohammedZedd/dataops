@@ -65,8 +65,7 @@ export function TopNavbar() {
   const navigate            = useNavigate();
 
   const [open, setOpen] = useState(false);
-  const [soundOn, setSoundOn] = useState(soundService.isEnabled());
-  const prevUnread = useRef(0);
+  const prevUnread = useRef(-1);
   const dropRef         = useRef<HTMLDivElement>(null);
 
   // Notifications
@@ -146,14 +145,6 @@ export function TopNavbar() {
                 transition-all focus:w-72"
             />
           </div>
-
-          {/* Sound toggle */}
-          <button onClick={() => { const v = !soundOn; soundService.setEnabled(v); setSoundOn(v); if (v) soundService.playNotification(); }}
-            title={soundOn ? 'Désactiver les sons' : 'Activer les sons'}
-            className="h-8 w-8 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors"
-            style={{ fontSize: 16, color: soundOn ? '#374151' : '#D1D5DB' }}>
-            {soundOn ? '🔔' : '🔕'}
-          </button>
 
           {/* Notifications */}
           <div ref={bellRef} style={{ position: 'relative' }}>

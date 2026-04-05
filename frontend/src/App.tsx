@@ -11,6 +11,7 @@ import RegisterPage from './pages/RegisterPage';
 import AccountingEntryPage from './pages/AccountingEntryPage';
 import DocumentsPage from './pages/DocumentsPage';
 import ChatPage from './pages/ChatPage';
+import SettingsPage from './pages/SettingsPage';
 import InvitationsPage from './pages/InvitationsPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ClientDocumentsPage from './pages/ClientDocumentsPage';
@@ -35,6 +36,7 @@ export default function App() {
               <Route path="clients/:clientId/invoices/:invoiceId" element={<DocumentDetailPage />} />
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="chat" element={<ChatPage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="accounting-entry" element={<AccountingEntryPage />} />
               <Route path="invitations" element={<InvitationsPage />} />
               <Route path="client/documents" element={<ClientDocumentsPage />} />
