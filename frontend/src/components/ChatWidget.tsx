@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MessageSquare, X, Send, ArrowLeft } from 'lucide-react';
 import apiClient from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { soundService } from '../utils/soundService';
 
 interface Msg { id: string; sender_id: string; sender_role: string; content: string; is_read: boolean; created_at: string }
 interface Conv { id: string; client_name: string | null; client_company: string | null; unread_count: number; last_message: { content: string; created_at: string } | null; last_message_at: string | null }
@@ -26,6 +27,7 @@ export function ChatWidget() {
   const [sending, setSending] = useState(false);
   const [totalUnread, setTotalUnread] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
+  const prevMsgCount = useRef(0);
 
   const isClient = user?.role === 'client';
   const isStaff = user?.role === 'admin' || user?.role === 'accountant';
@@ -49,7 +51,13 @@ export function ChatWidget() {
     if (!activeConvId) return;
     try {
       const { data } = await apiClient.get(`/chat/conversations/${activeConvId}/messages`);
-      setMsgs(data.messages ?? []);
+      const newMsgs: Msg[] = data.messages ?? [];
+      if (newMsgs.length > prevMsgCount.current && prevMsgCount.current > 0) {
+        const last = newMsgs[newMsgs.length - 1];
+        if (last && last.sender_id !== user?.id) soundService.playMessageReceived();
+      }
+      prevMsgCount.current = newMsgs.length;
+      setMsgs(newMsgs);
       // Clear unread for this conv locally
       setConvs(p => p.map(c => c.id === activeConvId ? { ...c, unread_count: 0 } : c));
     } catch { /* */ }
@@ -71,6 +79,8 @@ export function ChatWidget() {
       if (!cid) return;
       const { data } = await apiClient.post(`/chat/conversations/${cid}/messages`, { content, message_type: 'text' });
       setMsgs(p => [...p, data]);
+      prevMsgCount.current += 1;
+      soundService.playMessageSent();
     } catch { setText(content); }
     finally { setSending(false); }
   }
