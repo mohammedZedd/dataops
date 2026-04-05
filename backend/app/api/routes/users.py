@@ -31,6 +31,8 @@ def update_user(
     update_data = payload.model_dump(exclude_none=True)
     company_name = update_data.pop("company_name", None)
     secteur_activite = update_data.pop("secteur_activite", None)
+    regime_fiscal = update_data.pop("regime_fiscal", None)
+    forme_juridique = update_data.pop("forme_juridique", None)
 
     for field, value in update_data.items():
         setattr(target, field, value)
@@ -43,6 +45,12 @@ def update_user(
                 client.name = company_name
             if secteur_activite is not None:
                 client.secteur_activite = secteur_activite
+            if regime_fiscal is not None:
+                client.regime_fiscal = regime_fiscal
+            if forme_juridique is not None:
+                client.forme_juridique = forme_juridique
+            if "is_active" in payload.model_dump(exclude_none=True):
+                client.is_active = target.is_active
 
     db.commit()
     db.refresh(target)
@@ -56,6 +64,8 @@ def update_user(
         client_id=target.client_id,
         client_company_name=client.name if client else None,
         secteur_activite=client.secteur_activite if client else None,
+        regime_fiscal=client.regime_fiscal if client else None,
+        forme_juridique=client.forme_juridique if client else None,
         is_active=target.is_active,
         created_at=target.created_at,
     )

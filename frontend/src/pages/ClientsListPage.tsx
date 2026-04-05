@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Users, X, CheckCircle, User, Mail, Phone, Building2, Calendar, Ban, Pencil, Lock, Eye, Trash2, Plus, ChevronsUpDown, Search, FolderOpen, FileText, ImageIcon, FileSpreadsheet, File, ChevronDown, ChevronUp, Download, Briefcase } from 'lucide-react';
-import { SECTEURS_ACTIVITE } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { Users, X, CheckCircle, User, Mail, Phone, Building2, Calendar, Ban, Pencil, Lock, Eye, Trash2, Plus, ChevronsUpDown, Search, FolderOpen, FileText, ImageIcon, FileSpreadsheet, File, ChevronDown, ChevronUp, Download, Briefcase, ClipboardList, Loader2 } from 'lucide-react';
+import { SECTEURS_ACTIVITE, REGIMES_FISCAUX, FORMES_JURIDIQUES } from '../types';
 import { getClientUsers, revokeClientAccess, updateClientUser } from '../api/clients';
-import { getClientDocuments, getPresignedDownloadUrl } from '../api/documents';
+import { getClientDocuments, getPresignedDownloadUrl, createInvoiceFromDocument } from '../api/documents';
 import type { AdminClientDoc } from '../api/documents';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import InviteClientModal from '../features/invitations/InviteClientModal';
@@ -103,6 +104,8 @@ function DetailDrawer({ client, onClose, onRevoked, onUpdated, initialEditMode }
   const [editPhone,    setEditPhone]    = useState(client.phone_number ?? '');
   const [editCompany,  setEditCompany]  = useState(client.client_company_name ?? '');
   const [editSecteur,  setEditSecteur]  = useState(client.secteur_activite ?? '');
+  const [editRegime,   setEditRegime]   = useState(client.regime_fiscal ?? '');
+  const [editForme,    setEditForme]    = useState(client.forme_juridique ?? '');
   const [saving,       setSaving]       = useState(false);
   const [editError,    setEditError]    = useState<string | null>(null);
 
@@ -112,6 +115,8 @@ function DetailDrawer({ client, onClose, onRevoked, onUpdated, initialEditMode }
     setEditPhone(client.phone_number ?? '');
     setEditCompany(client.client_company_name ?? '');
     setEditSecteur(client.secteur_activite ?? '');
+    setEditRegime(client.regime_fiscal ?? '');
+    setEditForme(client.forme_juridique ?? '');
     setEditError(null);
     setEditMode(true);
   }
@@ -145,6 +150,8 @@ function DetailDrawer({ client, onClose, onRevoked, onUpdated, initialEditMode }
         phone_number:     editPhone.trim() || undefined,
         company_name:     editCompany.trim() || undefined,
         secteur_activite: editSecteur || undefined,
+        regime_fiscal: editRegime || undefined,
+        forme_juridique: editForme || undefined,
       });
       onUpdated(updated);
       setEditMode(false);
@@ -377,6 +384,76 @@ function DetailDrawer({ client, onClose, onRevoked, onUpdated, initialEditMode }
             </div>
           </div>
 
+          {/* RÉGIME FISCAL */}
+          <div style={{
+            display: 'flex', alignItems: editMode ? 'flex-start' : 'center', gap: 14,
+            padding: '12px 16px', background: '#F9FAFB',
+            border: '1px solid #E5E7EB', borderRadius: 8,
+          }}>
+            <div style={{
+              height: 32, width: 32, minWidth: 32, borderRadius: 8, background: '#EFF6FF',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: editMode ? 4 : 0,
+            }}>
+              <FileText size={15} color="#3B82F6" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: editMode ? 6 : 2 }}>
+                Régime fiscal
+              </p>
+              {editMode ? (
+                <select
+                  value={editRegime}
+                  onChange={(e) => setEditRegime((e.target as HTMLSelectElement).value)}
+                  style={{ ...INPUT_STYLE, color: editRegime ? '#111827' : '#9CA3AF' }}
+                >
+                  <option value="">— Non renseigné —</option>
+                  {REGIMES_FISCAUX.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              ) : (
+                <p style={{ fontSize: 14, fontWeight: 500, color: client.regime_fiscal ? '#111827' : '#9CA3AF' }}>
+                  {client.regime_fiscal ?? '—'}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* FORME JURIDIQUE */}
+          <div style={{
+            display: 'flex', alignItems: editMode ? 'flex-start' : 'center', gap: 14,
+            padding: '12px 16px', background: '#F9FAFB',
+            border: '1px solid #E5E7EB', borderRadius: 8,
+          }}>
+            <div style={{
+              height: 32, width: 32, minWidth: 32, borderRadius: 8, background: '#EFF6FF',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: editMode ? 4 : 0,
+            }}>
+              <Building2 size={15} color="#3B82F6" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: editMode ? 6 : 2 }}>
+                Forme juridique
+              </p>
+              {editMode ? (
+                <select
+                  value={editForme}
+                  onChange={(e) => setEditForme((e.target as HTMLSelectElement).value)}
+                  style={{ ...INPUT_STYLE, color: editForme ? '#111827' : '#9CA3AF' }}
+                >
+                  <option value="">— Non renseigné —</option>
+                  {FORMES_JURIDIQUES.map(f => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              ) : (
+                <p style={{ fontSize: 14, fontWeight: 500, color: client.forme_juridique ? '#111827' : '#9CA3AF' }}>
+                  {client.forme_juridique ?? '—'}
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* INSCRIPTION — always display */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 14,
@@ -513,6 +590,7 @@ function DetailDrawer({ client, onClose, onRevoked, onUpdated, initialEditMode }
 interface ClientDocsModalProps {
   client: ClientUser;
   onClose: () => void;
+  onNavigateToInvoice: (clientId: string, invoiceId: string) => void;
 }
 
 function fileIcon(name: string) {
@@ -549,11 +627,12 @@ function groupByMonth(docs: AdminClientDoc[]): { key: string; label: string; doc
     });
 }
 
-function ClientDocsModal({ client, onClose }: ClientDocsModalProps) {
+function ClientDocsModal({ client, onClose, onNavigateToInvoice }: ClientDocsModalProps) {
   const [docs,     setDocs]     = useState<AdminClientDoc[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [creatingInvoice, setCreatingInvoice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client.client_id) { setLoading(false); return; }
@@ -582,6 +661,26 @@ function ClientDocsModal({ client, onClose }: ClientDocsModalProps) {
     } catch { /* ignore */ }
   }
 
+  async function handleCreateInvoice(docId: string) {
+    if (!client.client_id) return;
+    setCreatingInvoice(docId);
+    try {
+      const invoice = await createInvoiceFromDocument(docId);
+      onClose();
+      onNavigateToInvoice(client.client_id, invoice.id);
+    } catch {
+      setError('Impossible de créer la facture.');
+    } finally {
+      setCreatingInvoice(null);
+    }
+  }
+
+  function handleViewInvoice(invoiceId: string) {
+    if (!client.client_id) return;
+    onClose();
+    onNavigateToInvoice(client.client_id, invoiceId);
+  }
+
   const initials = `${client.first_name.charAt(0)}${client.last_name.charAt(0)}`.toUpperCase();
   const groups   = groupByMonth(docs);
 
@@ -604,7 +703,7 @@ function ClientDocsModal({ client, onClose }: ClientDocsModalProps) {
       <div style={{
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: 680, maxHeight: '80vh',
+        width: 780, maxHeight: '80vh',
         background: '#fff', borderRadius: 16,
         boxShadow: '0 25px 60px rgba(0,0,0,0.15)',
         zIndex: 10000,
@@ -742,10 +841,78 @@ function ClientDocsModal({ client, onClose }: ClientDocsModalProps) {
                         </p>
                       </div>
 
+                      {/* Invoice status badge */}
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
+                        whiteSpace: 'nowrap', flexShrink: 0,
+                        background: !doc.invoice_id ? '#F3F4F6'
+                          : doc.invoice_status === 'validated' ? '#DCFCE7'
+                          : doc.invoice_status === 'rejected' ? '#FEE2E2'
+                          : '#FEF3C7',
+                        color: !doc.invoice_id ? '#9CA3AF'
+                          : doc.invoice_status === 'validated' ? '#16A34A'
+                          : doc.invoice_status === 'rejected' ? '#DC2626'
+                          : '#92400E',
+                      }}>
+                        {!doc.invoice_id ? 'Aucune facture'
+                          : doc.invoice_status === 'validated' ? 'Validée'
+                          : doc.invoice_status === 'rejected' ? 'Rejetée'
+                          : 'À traiter'}
+                      </span>
+
                       {/* Upload date */}
                       <span style={{ fontSize: 12, color: '#9CA3AF', whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {new Date(doc.uploaded_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                       </span>
+
+                      {/* Invoice action button */}
+                      {doc.invoice_id ? (
+                        <button
+                          onClick={() => handleViewInvoice(doc.invoice_id!)}
+                          title="Voir la facture"
+                          style={{
+                            height: 32, width: 32, borderRadius: 8, border: 'none',
+                            background: 'transparent', cursor: 'pointer', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#16A34A', transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={(e) => {
+                            const b = e.currentTarget as HTMLButtonElement;
+                            b.style.background = '#DCFCE7';
+                          }}
+                          onMouseLeave={(e) => {
+                            const b = e.currentTarget as HTMLButtonElement;
+                            b.style.background = 'transparent';
+                          }}
+                        >
+                          <Eye size={15} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleCreateInvoice(doc.id)}
+                          disabled={creatingInvoice === doc.id}
+                          title="Créer une facture manuellement"
+                          style={{
+                            height: 32, width: 32, borderRadius: 8, border: 'none',
+                            background: 'transparent', cursor: 'pointer', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#9CA3AF', transition: 'all 0.15s',
+                            opacity: creatingInvoice === doc.id ? 0.5 : 1,
+                          }}
+                          onMouseEnter={(e) => {
+                            const b = e.currentTarget as HTMLButtonElement;
+                            b.style.background = '#EFF6FF'; b.style.color = '#3B82F6';
+                          }}
+                          onMouseLeave={(e) => {
+                            const b = e.currentTarget as HTMLButtonElement;
+                            b.style.background = 'transparent'; b.style.color = '#9CA3AF';
+                          }}
+                        >
+                          {creatingInvoice === doc.id
+                            ? <Loader2 size={15} className="animate-spin" />
+                            : <ClipboardList size={15} />}
+                        </button>
+                      )}
 
                       {/* Download button */}
                       <button
@@ -784,6 +951,7 @@ function ClientDocsModal({ client, onClose }: ClientDocsModalProps) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ClientsListPage() {
+  const navigate = useNavigate();
   const [clients,       setClients]       = useState<ClientUser[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState<string | null>(null);
@@ -1201,6 +1369,10 @@ export default function ClientsListPage() {
         <ClientDocsModal
           client={docsTarget}
           onClose={() => setDocsTarget(null)}
+          onNavigateToInvoice={(clientId, invoiceId) => {
+            setDocsTarget(null);
+            navigate(`/clients/${clientId}/invoices/${invoiceId}`);
+          }}
         />
       )}
     </>

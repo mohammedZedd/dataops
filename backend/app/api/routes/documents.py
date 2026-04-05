@@ -6,12 +6,18 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from fastapi import status as http_status
+
 from app.dependencies.auth import get_current_user
+from app.models.client import Client
 from app.models.document import Document
+from app.models.invoice import Invoice
 from app.models.user import User, UserRole
 from app.db.dependencies import get_db
-from app.schemas.document import DocumentCreate, DocumentRead, PresignedUrlResponse
-from app.services import client_service, document_service, s3_service
+from app.schemas.document import DocumentCreate, DocumentRead, ExtractionResult, ManualInvoiceCreate, PresignedUrlResponse
+from app.schemas.invoice import InvoiceRead
+from app.services import client_service, document_service, invoice_service, s3_service
+from app.utils.textract_service import textract_service, TextractError
 
 router = APIRouter(tags=["documents"])
 
@@ -35,12 +41,11 @@ def _slugify(text: str) -> str:
 def _build_s3_key(user: User, filename: str) -> str:
     """Construit la clé S3 avec noms slugifiés selon le rôle de l'utilisateur."""
     safe_name = Path(filename).name  # évite les path traversal
-    unique_name = f"{uuid.uuid4()}_{safe_name}"
     company_slug = _slugify(user.company.name)
     person_slug = _slugify(f"{user.first_name} {user.last_name}")
     if user.role == UserRole.CLIENT:
-        return f"{company_slug}/clients/{person_slug}/{unique_name}"
-    return f"{company_slug}/accountants/{person_slug}/{unique_name}"
+        return f"{company_slug}/clients/{person_slug}/{safe_name}"
+    return f"{company_slug}/accountants/{person_slug}/{safe_name}"
 
 
 def _check_ownership(doc: Document, current_user: User) -> None:
@@ -72,8 +77,20 @@ async def upload_document(
         content_type=file.content_type or "application/octet-stream",
     )
 
+    # Resolve client_id: use user's linked client, or auto-create for CLIENT users
+    client_id = current_user.client_id
+    if not client_id and current_user.role == UserRole.CLIENT:
+        new_client = Client(
+            name=f"{current_user.first_name} {current_user.last_name}",
+            company_id=current_user.company_id,
+        )
+        db.add(new_client)
+        db.flush()
+        current_user.client_id = new_client.id
+        client_id = new_client.id
+
     doc = Document(
-        client_id=current_user.client_id,
+        client_id=client_id,
         uploaded_by_user_id=current_user.id,
         file_name=original_name,
         s3_key=s3_key,
@@ -96,7 +113,16 @@ def preview_document(
     doc = db.get(Document, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document introuvable.")
-    _check_ownership(doc, current_user)
+
+    if current_user.role == UserRole.CLIENT:
+        _check_ownership(doc, current_user)
+    else:
+        if doc.client_id:
+            client = client_service.get_client(db, doc.client_id)
+            if not client or client.company_id != current_user.company_id:
+                raise HTTPException(status_code=403, detail="Accès refusé.")
+        elif doc.uploaded_by_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Accès refusé.")
 
     url = s3_service.generate_presigned_url_inline(doc.s3_key, doc.file_name)
     return PresignedUrlResponse(url=url)
@@ -208,3 +234,97 @@ def get_document(
     if current_user.role != UserRole.CLIENT and client.company_id != current_user.company_id:
         raise HTTPException(status_code=403, detail="Accès refusé.")
     return document_service._to_read(doc)
+
+
+# ─── Manual invoice creation from document ───────────────────────────────────
+
+@router.post("/documents/{document_id}/create-invoice", response_model=InvoiceRead, status_code=201)
+def create_invoice_from_document(
+    document_id: str,
+    payload: ManualInvoiceCreate = ManualInvoiceCreate(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role == UserRole.CLIENT:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Seuls les administrateurs et comptables peuvent créer des factures.",
+        )
+
+    doc = document_service.get_document(db, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document introuvable.")
+
+    # Verify company access
+    if doc.client_id:
+        client = client_service.get_client(db, doc.client_id)
+        if not client or client.company_id != current_user.company_id:
+            raise HTTPException(status_code=403, detail="Accès refusé.")
+
+    # Return existing invoice if one exists
+    if doc.invoice:
+        return invoice_service._to_read(doc.invoice)
+
+    # Try auto-extraction via Textract
+    extracted = {}
+    try:
+        extracted = textract_service.extract_from_s3(doc.s3_key)
+    except Exception:
+        pass  # extraction is best-effort
+
+    # Merge: explicit payload fields override extracted values
+    invoice = Invoice(
+        document_id=doc.id,
+        invoice_number=payload.invoice_number or extracted.get("invoice_number") or "",
+        supplier_name=payload.supplier_name or extracted.get("supplier_name") or "",
+        date=payload.date or extracted.get("date") or "",
+        total_amount=payload.total_amount or extracted.get("total_amount") or 0,
+        vat_amount=payload.vat_amount or extracted.get("vat_amount") or 0,
+        status="to_review",
+        direction=payload.direction,
+    )
+    db.add(invoice)
+    db.commit()
+    db.refresh(invoice)
+    return invoice_service._to_read(invoice)
+
+
+# ─── Document data extraction (AWS Textract) ────────────────────────────────
+
+@router.post("/documents/{document_id}/extract", response_model=ExtractionResult)
+def extract_document_data(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role == UserRole.CLIENT:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Accès refusé.",
+        )
+
+    doc = document_service.get_document(db, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document introuvable.")
+
+    if doc.client_id:
+        client = client_service.get_client(db, doc.client_id)
+        if not client or client.company_id != current_user.company_id:
+            raise HTTPException(status_code=403, detail="Accès refusé.")
+
+    ext = doc.file_name.lower().rsplit(".", 1)[-1] if "." in doc.file_name else ""
+    if ext not in ("pdf", "jpg", "jpeg", "png"):
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Format non supporté. Utilisez PDF, JPEG ou PNG.",
+        )
+
+    try:
+        result = textract_service.extract_from_s3(doc.s3_key)
+    except TextractError as exc:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+
+    return ExtractionResult(**result)

@@ -1,16 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  AlertTriangle, Check, X, Plus, ChevronDown, ChevronUp,
-  BookOpen, Loader2, CheckCircle2,
+  AlertTriangle, Check, X, Plus, ChevronUp, Info,
+  BookOpen, Loader2, CheckCircle2, RefreshCw,
 } from 'lucide-react';
-import { getSuggestedAccounts, saveInvoiceAccounts } from '../../api/invoices';
-import type { AccountEntry, AccountSuggestion, InvoiceDirection, SuggestedAccountsResponse } from '../../types';
+import { getSuggestedAccounts, saveInvoiceAccounts, exportInvoiceExcel } from '../../api/invoices';
+import type { AccountEntry, AccountSuggestion, InvoiceDirection, SuggestedAccountsResponse, RetenueSource } from '../../types';
 
 interface Props {
   invoiceId: string;
   secteurActivite?: string | null;
+  regimeFiscal?: string | null;
   totalAmount: number;
   vatAmount: number;
+  accountingValidated?: boolean;
   onSaved?: () => void;
 }
 
@@ -35,26 +37,26 @@ const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   tiers:   { bg: '#F3F4F6', text: '#374151' },
 };
 
+const SENS_LABELS: Record<string, { label: string; color: string }> = {
+  debit:  { label: 'Débit',  color: '#2563EB' },
+  credit: { label: 'Crédit', color: '#059669' },
+};
+
 function formatAmount(n: number | null | undefined): string {
   if (n == null) return '—';
   return n.toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' MAD';
 }
 
-function getRowAmount(row: AccountRow): number | null {
-  if (row.montant_ht != null) return row.montant_ht;
-  if (row.montant_tva != null) return row.montant_tva;
-  if (row.montant_ttc != null) return row.montant_ttc;
-  return null;
-}
-
-export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vatAmount, onSaved }: Props) {
+export function AccountingSection({ invoiceId, secteurActivite, regimeFiscal, totalAmount, vatAmount, accountingValidated: initialValidated, onSaved }: Props) {
   const [data,      setData]      = useState<SuggestedAccountsResponse | null>(null);
   const [rows,      setRows]      = useState<AccountRow[]>([]);
   const [direction, setDirection] = useState<InvoiceDirection>('achat');
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState<string | null>(null);
-  const [saving,    setSaving]    = useState(false);
-  const [saved,     setSaved]     = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [saved,      setSaved]      = useState(initialValidated ?? false);
+  const [exporting,  setExporting]  = useState(false);
+  const [exportErr,  setExportErr]  = useState<string | null>(null);
 
   // Custom account add form
   const [showAdd,    setShowAdd]    = useState(false);
@@ -62,6 +64,7 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
   const [addLibelle, setAddLibelle] = useState('');
   const [addMontant, setAddMontant] = useState('');
   const [addType,    setAddType]    = useState('charge');
+  const [addSens,    setAddSens]    = useState('debit');
 
   const fetchSuggestions = useCallback(async () => {
     setLoading(true);
@@ -74,9 +77,7 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
         result.suggested_accounts.map(acc => ({
           ...acc,
           state: acc.is_primary ? 'validated' : 'pending',
-          editedAmount: String(
-            acc.montant_ht ?? acc.montant_tva ?? acc.montant_ttc ?? ''
-          ),
+          editedAmount: String(acc.montant ?? ''),
         }))
       );
     } catch (err) {
@@ -88,16 +89,6 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
 
   useEffect(() => { fetchSuggestions(); }, [fetchSuggestions]);
 
-  function toggleRow(index: number) {
-    setRows(prev => prev.map((r, i) => {
-      if (i !== index) return r;
-      const nextState: RowState = r.state === 'validated' ? 'rejected'
-        : r.state === 'rejected' ? 'pending'
-        : 'validated';
-      return { ...r, state: nextState };
-    }));
-  }
-
   function updateAmount(index: number, value: string) {
     setRows(prev => prev.map((r, i) => i === index ? { ...r, editedAmount: value } : r));
   }
@@ -108,39 +99,41 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
     const newRow: AccountRow = {
       code: addCode.trim(),
       libelle: addLibelle.trim(),
-      type: addType as AccountRow['type'],
+      type: addType as AccountSuggestion['type'],
+      sens: addSens as AccountSuggestion['sens'],
+      montant,
       is_primary: false,
+      obligatoire: false,
       state: 'validated',
       editedAmount: addMontant,
-      montant_ht:  addType === 'charge' || addType === 'produit' ? montant : undefined,
-      montant_tva: addType === 'tva'    ? montant : undefined,
-      montant_ttc: addType === 'tiers'  ? montant : undefined,
     };
     setRows(prev => [...prev, newRow]);
-    setAddCode(''); setAddLibelle(''); setAddMontant(''); setAddType('charge');
+    setAddCode(''); setAddLibelle(''); setAddMontant(''); setAddType('charge'); setAddSens('debit');
     setShowAdd(false);
   }
 
   async function handleSave() {
+    const accounts: AccountEntry[] = rows
+      .filter(r => r.state === 'validated')
+      .map(r => ({
+        code: r.code,
+        libelle: r.libelle,
+        type: r.type,
+        sens: r.sens,
+        montant: parseFloat(r.editedAmount) || r.montant || 0,
+        validated: true,
+      }));
+
+    if (accounts.length === 0) {
+      setError('Aucun compte validé. Cliquez sur ✓ pour valider des comptes avant de sauvegarder.');
+      return;
+    }
+
     setSaving(true);
+    setError(null);
     try {
-      const accounts: AccountEntry[] = rows
-        .filter(r => r.state === 'validated')
-        .map(r => {
-          const amt = parseFloat(r.editedAmount) || getRowAmount(r) || 0;
-          return {
-            code: r.code,
-            libelle: r.libelle,
-            type: r.type,
-            montant_ht:  r.type === 'charge' || r.type === 'produit' ? amt : null,
-            montant_tva: r.type === 'tva'    ? amt : null,
-            montant_ttc: r.type === 'tiers'  ? amt : null,
-            validated: true,
-          };
-        });
       await saveInvoiceAccounts(invoiceId, accounts, direction);
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
       onSaved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde.');
@@ -148,6 +141,24 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
       setSaving(false);
     }
   }
+
+  async function handleExportExcel() {
+    setExporting(true);
+    setExportErr(null);
+    try {
+      await exportInvoiceExcel(invoiceId);
+    } catch (err) {
+      setExportErr(err instanceof Error ? err.message : 'Erreur export Excel.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // ─── Balance check ────────────────────────────────────────────────────────
+  const validatedRows = rows.filter(r => r.state === 'validated');
+  const totalDebit  = validatedRows.filter(r => r.sens === 'debit').reduce((s, r) => s + (parseFloat(r.editedAmount) || r.montant || 0), 0);
+  const totalCredit = validatedRows.filter(r => r.sens === 'credit').reduce((s, r) => s + (parseFloat(r.editedAmount) || r.montant || 0), 0);
+  const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
   // ─── No secteur warning ───────────────────────────────────────────────────
   if (!secteurActivite) {
@@ -179,6 +190,9 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
     'border border-gray-200 rounded px-2 py-1 text-[12px] text-gray-800 ' +
     'focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white';
 
+  const isAutoEntrepreneur = regimeFiscal === 'Auto-entrepreneur';
+  const isExonere = data?.tva_rate === 0;
+
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5"
       style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06)' }}>
@@ -192,7 +206,7 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
           </p>
         </div>
         {data && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Direction toggle */}
             <button
               onClick={() => setDirection(d => d === 'achat' ? 'vente' : 'achat')}
@@ -203,15 +217,53 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
               }}
               title="Cliquer pour changer la direction"
             >
-              {direction === 'achat' ? '🔴 ACHAT' : '🟢 VENTE'}
+              {direction === 'achat' ? 'ACHAT' : 'VENTE'}
             </button>
+            {/* Journal badge */}
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600">
+              {data.journal}
+            </span>
             {/* TVA badge */}
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-700">
               TVA {data.tva_rate}%
             </span>
+            {/* Secteur badge */}
+            {data.secteur && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-50 text-gray-500 border border-gray-200">
+                {data.secteur}
+              </span>
+            )}
           </div>
         )}
       </div>
+
+      {/* Info banners */}
+      {data?.retenue_source?.applicable && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+          <AlertTriangle size={13} className="text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-[12px] text-amber-700">
+            Retenue à la source {data.retenue_source.taux}% applicable — {data.retenue_source.note}
+          </p>
+        </div>
+      )}
+
+      {isAutoEntrepreneur && (
+        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3">
+          <Info size={13} className="text-blue-500 flex-shrink-0 mt-0.5" />
+          <p className="text-[12px] text-blue-700">
+            Client auto-entrepreneur — vérifier assujettissement TVA (CA &lt; seuils légaux)
+          </p>
+        </div>
+      )}
+
+      {isExonere && !isAutoEntrepreneur && (
+        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3">
+          <Info size={13} className="text-blue-500 flex-shrink-0 mt-0.5" />
+          <p className="text-[12px] text-blue-700">
+            Secteur exonéré de TVA — pas de TVA à facturer
+          </p>
+        </div>
+      )}
 
       {/* Loading / Error */}
       {loading && (
@@ -233,7 +285,7 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#F8FAFC' }}>
-                  {['COMPTE', 'LIBELLÉ', 'TYPE', 'MONTANT', 'ACTION'].map(col => (
+                  {['SENS', 'COMPTE', 'LIBELLÉ', 'TYPE', 'MONTANT', 'ACTION'].map(col => (
                     <th key={col} style={{
                       padding: '8px 10px', textAlign: 'left',
                       fontSize: 10, fontWeight: 600, color: '#6B7280',
@@ -248,6 +300,7 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
               <tbody>
                 {rows.map((row, idx) => {
                   const colors = TYPE_COLORS[row.type] ?? TYPE_COLORS.tiers;
+                  const sensInfo = SENS_LABELS[row.sens] ?? SENS_LABELS.debit;
                   const isValidated = row.state === 'validated';
                   const isRejected  = row.state === 'rejected';
                   return (
@@ -259,12 +312,29 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
                         opacity: isRejected ? 0.45 : 1,
                       }}
                     >
+                      {/* SENS */}
+                      <td style={{ padding: '8px 10px' }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+                          background: row.sens === 'debit' ? '#DBEAFE' : '#D1FAE5',
+                          color: sensInfo.color,
+                          letterSpacing: '0.03em',
+                        }}>
+                          {sensInfo.label}
+                        </span>
+                      </td>
+                      {/* COMPTE */}
                       <td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 600, fontFamily: 'monospace', color: '#111827' }}>
                         {row.code}
                       </td>
-                      <td style={{ padding: '8px 10px', fontSize: 12, color: '#374151', maxWidth: 200 }}>
+                      {/* LIBELLÉ */}
+                      <td style={{ padding: '8px 10px', fontSize: 12, color: '#374151', maxWidth: 220 }}>
                         {row.libelle}
+                        {row.obligatoire && (
+                          <span style={{ fontSize: 9, color: '#DC2626', marginLeft: 4, fontWeight: 600 }}>*</span>
+                        )}
                       </td>
+                      {/* TYPE */}
                       <td style={{ padding: '8px 10px' }}>
                         <span style={{
                           fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10,
@@ -273,6 +343,7 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
                           {TYPE_LABELS[row.type] ?? row.type}
                         </span>
                       </td>
+                      {/* MONTANT */}
                       <td style={{ padding: '8px 10px' }}>
                         {isValidated ? (
                           <input
@@ -281,14 +352,15 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
                             value={row.editedAmount}
                             onChange={e => updateAmount(idx, e.target.value)}
                             className={INPUT_CLS}
-                            style={{ width: 100 }}
+                            style={{ width: 110 }}
                           />
                         ) : (
                           <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-                            {formatAmount(getRowAmount(row))}
+                            {formatAmount(row.montant)}
                           </span>
                         )}
                       </td>
+                      {/* ACTION */}
                       <td style={{ padding: '8px 10px' }}>
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button
@@ -322,6 +394,24 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Balance check */}
+          <div className="mt-3 flex items-center gap-2">
+            {isBalanced ? (
+              <div className="flex items-center gap-1.5 text-[12px] text-emerald-600 font-medium">
+                <CheckCircle2 size={13} />
+                Écriture équilibrée
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[12px] text-red-600 font-medium">
+                <X size={13} />
+                Déséquilibre : {formatAmount(Math.abs(totalDebit - totalCredit))}
+              </div>
+            )}
+            <span className="text-[11px] text-gray-400 ml-2">
+              Débit: {formatAmount(totalDebit)} | Crédit: {formatAmount(totalCredit)}
+            </span>
           </div>
 
           {/* Add custom account */}
@@ -366,6 +456,13 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
                   </select>
                 </div>
                 <div>
+                  <p className="text-[10px] font-semibold text-gray-500 mb-1 uppercase">Sens</p>
+                  <select value={addSens} onChange={e => setAddSens(e.target.value)} className={INPUT_CLS}>
+                    <option value="debit">Débit</option>
+                    <option value="credit">Crédit</option>
+                  </select>
+                </div>
+                <div>
                   <p className="text-[10px] font-semibold text-gray-500 mb-1 uppercase">Montant</p>
                   <input
                     type="number"
@@ -391,29 +488,59 @@ export function AccountingSection({ invoiceId, secteurActivite, totalAmount, vat
           </div>
 
           {/* Footer */}
-          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-            {saved && (
-              <div className="flex items-center gap-1.5 text-[12px] text-emerald-600 font-medium">
-                <CheckCircle2 size={13} />
-                Imputation enregistrée
-              </div>
-            )}
-            {!saved && error && (
+          <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+            {error && !saved && (
               <p className="text-[12px] text-red-600">{error}</p>
             )}
-            {!saved && !error && <span />}
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700
-                disabled:opacity-60 text-white text-[13px] font-medium rounded-lg transition-colors"
-            >
-              {saving ? (
-                <><Loader2 size={13} className="animate-spin" /> Enregistrement…</>
-              ) : (
-                <><CheckCircle2 size={13} /> Valider l'imputation</>
-              )}
-            </button>
+            {exportErr && (
+              <p className="text-[12px] text-red-600">{exportErr}</p>
+            )}
+
+            {saved ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-center gap-1.5 text-[13px] text-emerald-600 font-medium py-2">
+                  <CheckCircle2 size={14} />
+                  Imputation validée avec succès
+                </div>
+                <button
+                  onClick={handleExportExcel}
+                  disabled={exporting}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5
+                    bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60
+                    text-white text-[13px] font-medium rounded-lg transition-colors"
+                >
+                  {exporting ? (
+                    <><Loader2 size={14} className="animate-spin" /> Téléchargement…</>
+                  ) : (
+                    <>Télécharger le journal Excel</>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={fetchSuggestions}
+                  className="inline-flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-700 transition-colors"
+                  title="Réinitialiser les suggestions"
+                >
+                  <RefreshCw size={12} />
+                  Réinitialiser
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !isBalanced}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700
+                    disabled:opacity-60 text-white text-[13px] font-medium rounded-lg transition-colors"
+                  title={!isBalanced ? "L'écriture doit être équilibrée pour valider" : undefined}
+                >
+                  {saving ? (
+                    <><Loader2 size={13} className="animate-spin" /> Enregistrement…</>
+                  ) : (
+                    <><CheckCircle2 size={13} /> Valider l'imputation</>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

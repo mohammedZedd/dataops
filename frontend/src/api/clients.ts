@@ -84,6 +84,8 @@ export async function updateClientUser(
     phone_number?: string;
     company_name?: string;
     secteur_activite?: string;
+    regime_fiscal?: string;
+    forme_juridique?: string;
   },
 ): Promise<ClientUser> {
   try {

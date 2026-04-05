@@ -12,7 +12,7 @@ from app.schemas.client import ClientCreate, ClientRead
 def _to_read(db: Session, client: Client) -> ClientRead:
     """Enrichit un Client avec les compteurs calculés."""
     docs_count = db.scalar(
-        select(func.count()).where(Document.client_id == client.id)
+        select(func.count(Document.id)).where(Document.client_id == client.id)
     ) or 0
 
     to_review = db.scalar(

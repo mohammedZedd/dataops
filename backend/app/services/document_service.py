@@ -18,6 +18,7 @@ def _to_read(doc: Document) -> DocumentRead:
         uploaded_at=doc.uploaded_at,
         status=doc.status,
         invoice_id=doc.invoice.id if doc.invoice else None,
+        invoice_status=doc.invoice.status if doc.invoice else None,
     )
 
 

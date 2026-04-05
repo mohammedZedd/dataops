@@ -43,6 +43,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Votre accès a été révoqué. Contactez votre cabinet comptable.",
         )
+    if user.client_id:
+        client = db.get(Client, user.client_id)
+        if client and not client.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Votre accès a été révoqué. Contactez votre cabinet comptable.",
+            )
     token = create_access_token(user.id)
     return TokenResponse(access_token=token, user=UserRead.model_validate(user))
 

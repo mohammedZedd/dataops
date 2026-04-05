@@ -22,10 +22,23 @@ export default function LoginPage() {
       setAuth(access_token, user);
       navigate('/');
     } catch (err) {
-      const msg = err instanceof AxiosError
-        ? err.response?.data?.detail ?? 'Identifiants invalides.'
-        : 'Une erreur est survenue.';
-      setError(msg);
+      if (err instanceof AxiosError && err.response) {
+        const { status, data } = err.response;
+        const detail = data?.detail;
+        if (status === 401) {
+          setError(detail || 'Email ou mot de passe incorrect.');
+        } else if (status === 403) {
+          setError(detail || 'Votre accès a été révoqué. Contactez votre cabinet comptable.');
+        } else if (status === 422) {
+          setError('Veuillez vérifier le format de votre email.');
+        } else if (status >= 500) {
+          setError('Erreur serveur. Veuillez réessayer plus tard.');
+        } else {
+          setError(detail || 'Une erreur est survenue.');
+        }
+      } else {
+        setError('Impossible de contacter le serveur. Vérifiez votre connexion internet.');
+      }
     } finally {
       setLoading(false);
     }

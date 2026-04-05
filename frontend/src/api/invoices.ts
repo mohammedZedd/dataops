@@ -106,3 +106,27 @@ export async function saveInvoiceAccounts(
     throw new Error("Impossible d'enregistrer l'imputation comptable.");
   }
 }
+
+export async function exportInvoiceExcel(invoiceId: string): Promise<void> {
+  try {
+    const response = await apiClient.get(`/invoices/${invoiceId}/export-excel`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const disposition = response.headers['content-disposition'];
+    const match = disposition?.match(/filename="?(.+?)"?$/);
+    a.download = match?.[1] ?? `journal_${invoiceId}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error(`[invoices] exportInvoiceExcel(${invoiceId}) :`, error);
+    throw new Error('Impossible de télécharger le journal Excel.');
+  }
+}

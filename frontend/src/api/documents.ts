@@ -1,5 +1,5 @@
 import apiClient from './axios';
-import type { ClientDocument } from '../types';
+import type { ClientDocument, Invoice } from '../types';
 
 export interface AdminClientDoc {
   id: string;
@@ -7,6 +7,8 @@ export interface AdminClientDoc {
   file_size: number | null;
   uploaded_at: string;
   status: string;
+  invoice_id: string | null;
+  invoice_status: string | null;
 }
 
 export async function getClientDocuments(clientId: string): Promise<AdminClientDoc[]> {
@@ -48,5 +50,33 @@ export async function uploadDocument(
       }
     },
   });
+  return data;
+}
+
+export async function createInvoiceFromDocument(documentId: string): Promise<Invoice> {
+  const { data } = await apiClient.post<Invoice>(`/documents/${documentId}/create-invoice`);
+  return data;
+}
+
+export interface ExtractionResult {
+  invoice_number: string | null;
+  date: string | null;
+  supplier_name: string | null;
+  total_amount: number | null;
+  vat_amount: number | null;
+  ht_amount: number | null;
+  vat_rate: number;
+  ice: string | null;
+  if_fiscal: string | null;
+  rc: string | null;
+  tp: string | null;
+  cnss: string | null;
+  currency: string;
+  confidence: number;
+  raw_text: string;
+}
+
+export async function extractDocumentData(documentId: string): Promise<ExtractionResult> {
+  const { data } = await apiClient.post<ExtractionResult>(`/documents/${documentId}/extract`);
   return data;
 }

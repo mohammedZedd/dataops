@@ -57,13 +57,17 @@ def list_client_users(
         company_name = None
         docs_count = 0
         secteur_activite = None
+        regime_fiscal = None
+        forme_juridique = None
         if u.client_id:
             client = client_service.get_client(db, u.client_id)
             if client:
                 company_name = client.name
                 secteur_activite = client.secteur_activite
+                regime_fiscal = client.regime_fiscal
+                forme_juridique = client.forme_juridique
             docs_count = db.scalar(
-                select(func.count()).where(Document.client_id == u.client_id)
+                select(func.count(Document.id)).where(Document.client_id == u.client_id)
             ) or 0
         result.append(ClientUserRead(
             id=u.id,
@@ -74,6 +78,8 @@ def list_client_users(
             client_id=u.client_id,
             client_company_name=company_name,
             secteur_activite=secteur_activite,
+            regime_fiscal=regime_fiscal,
+            forme_juridique=forme_juridique,
             documents_count=docs_count,
             is_active=u.is_active,
             created_at=u.created_at,

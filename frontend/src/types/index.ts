@@ -124,6 +124,8 @@ export interface ClientUser {
   client_id?: string | null;
   client_company_name?: string | null;
   secteur_activite?: string | null;
+  regime_fiscal?: string | null;
+  forme_juridique?: string | null;
   documents_count?: number;
   is_active: boolean;
   created_at: string;
@@ -138,6 +140,8 @@ export interface Client {
   siret?: string;
   email?: string;
   secteur_activite?: string | null;
+  regime_fiscal?: string | null;
+  forme_juridique?: string | null;
   documents_count: number;
   invoices_to_review: number;
   created_at: string;
@@ -182,15 +186,28 @@ export interface AccountSuggestion {
   code: string;
   libelle: string;
   type: 'charge' | 'tva' | 'tiers' | 'produit';
-  montant_ht?: number | null;
-  montant_tva?: number | null;
-  montant_ttc?: number | null;
+  sens: 'debit' | 'credit';
+  montant: number;
   is_primary: boolean;
+  obligatoire: boolean;
+}
+
+export interface RetenueSource {
+  applicable: boolean;
+  taux: number;
+  compte: string | null;
+  libelle: string | null;
+  note: string | null;
 }
 
 export interface SuggestedAccountsResponse {
   direction: InvoiceDirection;
+  journal: string;
   tva_rate: number;
+  tva_regime: string;
+  secteur: string | null;
+  regime_fiscal: string | null;
+  retenue_source: RetenueSource;
   suggested_accounts: AccountSuggestion[];
 }
 
@@ -198,9 +215,8 @@ export interface AccountEntry {
   code: string;
   libelle: string;
   type: string;
-  montant_ht?: number | null;
-  montant_tva?: number | null;
-  montant_ttc?: number | null;
+  sens: string;
+  montant: number;
   validated: boolean;
 }
 
@@ -220,18 +236,53 @@ export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
 };
 
 export const SECTEURS_ACTIVITE = [
-  'Commerce général',
+  'Commerce général (import/export, négoce)',
   'Commerce de détail',
+  'Grande distribution',
   'Import / Export',
   'BTP (Bâtiment et Travaux Publics)',
-  'Services informatiques',
-  'Conseil et expertise',
-  'Transport et logistique',
+  'Promotion immobilière',
+  'Services informatiques et numérique',
+  'Conseil et expertise comptable',
+  'Professions libérales (médecin, avocat, architecte, notaire)',
+  'Transport routier de marchandises',
+  'Transport de voyageurs',
+  'Logistique et entreposage',
   'Industrie manufacturière',
-  'Agriculture et agro-alimentaire',
-  'Immobilier et promotion immobilière',
-  'Hôtellerie et restauration',
-  'Santé et pharmacie',
-  'Education et formation',
+  'Industrie agroalimentaire',
+  'Agriculture et élevage',
+  'Pêche et aquaculture',
+  'Mines et carrières',
+  'Artisanat',
+  'Hôtellerie et hébergement',
+  'Restauration et cafés',
+  'Télécommunications',
+  'Banque et établissements de crédit',
+  'Assurance',
+  'Santé (cliniques, cabinets médicaux)',
+  'Pharmacie et parapharmacie',
+  'Education et formation professionnelle',
+  'Média et communication',
+  'Énergie et environnement',
   'Autre',
+] as const;
+
+export const REGIMES_FISCAUX = [
+  'Résultat net réel (RNR)',
+  'Résultat net simplifié (RNS)',
+  'Forfait',
+  'Auto-entrepreneur',
+  'Exonéré (zones franches, CFC, etc.)',
+] as const;
+
+export const FORMES_JURIDIQUES = [
+  'SARL (Société à Responsabilité Limitée)',
+  'SA (Société Anonyme)',
+  'SNC (Société en Nom Collectif)',
+  'SCS (Société en Commandite Simple)',
+  'Auto-entrepreneur',
+  'Personne physique (commerçant)',
+  'Association',
+  'Coopérative',
+  'Succursale étrangère',
 ] as const;

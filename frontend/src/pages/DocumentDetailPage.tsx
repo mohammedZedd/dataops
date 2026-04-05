@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ChevronRight, ArrowLeft, FileText } from 'lucide-react';
+import { ChevronRight, ArrowLeft, FileText, Loader2, Download } from 'lucide-react';
 import { getInvoice, getClient, updateInvoice, validateInvoice } from '../api';
+import { getPresignedPreviewUrl, getPresignedDownloadUrl, extractDocumentData } from '../api/documents';
+import type { ExtractionResult } from '../api/documents';
 import { InvoiceForm } from '../features/invoices/InvoiceForm';
 import { AccountingSection } from '../features/invoices/AccountingSection';
 import { StatusBadge } from '../components/ui/StatusBadge';
@@ -10,26 +12,62 @@ import type { Client, Invoice } from '../types';
 
 // ─── Document preview ─────────────────────────────────────────────────────────
 
-function DocumentPreview({ fileUrl }: { fileUrl?: string }) {
-  if (fileUrl) {
+function DocumentPreview({ documentId }: { documentId: string }) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(false);
+    getPresignedPreviewUrl(documentId)
+      .then(url => setPreviewUrl(url))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [documentId]);
+
+  async function handleDownload() {
+    try {
+      const url = await getPresignedDownloadUrl(documentId);
+      window.open(url, '_blank');
+    } catch { /* ignore */ }
+  }
+
+  if (loading) {
     return (
-      <iframe
-        src={fileUrl}
-        className="w-full h-full rounded-lg border border-gray-200"
-        title="Aperçu du document"
-      />
+      <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+        <Loader2 size={24} className="text-blue-500 animate-spin mb-3" />
+        <p className="text-[13px] text-gray-500">Chargement de l'aperçu…</p>
+      </div>
     );
   }
-  return (
-    <div className="flex flex-col items-center justify-center h-full bg-gray-50
-      rounded-xl border-2 border-dashed border-gray-200">
-      <div className="h-16 w-16 rounded-2xl bg-white border border-gray-200 shadow-sm
-        flex items-center justify-center mb-4">
-        <FileText size={28} className="text-gray-300" />
+
+  if (error || !previewUrl) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+        <div className="h-16 w-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center mb-4">
+          <FileText size={28} className="text-gray-300" />
+        </div>
+        <p className="text-[13px] font-medium text-gray-500">Aperçu non disponible</p>
+        <button
+          onClick={handleDownload}
+          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium
+            text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+        >
+          <Download size={13} />
+          Télécharger le document
+        </button>
       </div>
-      <p className="text-[13px] font-medium text-gray-500">Aperçu non disponible</p>
-      <p className="text-[12px] text-gray-400 mt-1">Le fichier n'a pas été chargé.</p>
-    </div>
+    );
+  }
+
+  return (
+    <iframe
+      src={previewUrl}
+      className="w-full h-full rounded-lg border border-gray-200"
+      title="Aperçu du document"
+      style={{ border: 'none', borderRadius: 8 }}
+    />
   );
 }
 
@@ -44,6 +82,12 @@ export default function DocumentDetailPage() {
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Extraction state
+  const [extraction,      setExtraction]      = useState<ExtractionResult | null>(null);
+  const [extracting,      setExtracting]      = useState(false);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
+  const extractionRan = useRef(false);
 
   const fetchData = useCallback(() => {
     if (!clientId || !invoiceId) {
@@ -61,6 +105,49 @@ export default function DocumentDetailPage() {
   }, [clientId, invoiceId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Auto-extract on first load if form is empty
+  useEffect(() => {
+    if (!invoice || extractionRan.current || extracting) return;
+    const isEmpty = !invoice.invoice_number && !invoice.supplier_name
+      && !invoice.date && invoice.total_amount === 0 && invoice.vat_amount === 0;
+    if (!isEmpty) return;
+
+    extractionRan.current = true;
+    runExtraction();
+  }, [invoice]);
+
+  async function runExtraction() {
+    if (!invoice) return;
+    setExtracting(true);
+    setExtractionError(null);
+    try {
+      const result = await extractDocumentData(invoice.document_id);
+      setExtraction(result);
+
+      // Auto-save extracted fields
+      if (result.confidence > 0 && invoiceId) {
+        const payload: Record<string, unknown> = {};
+        if (result.invoice_number) payload.invoice_number = result.invoice_number;
+        if (result.supplier_name)  payload.supplier_name = result.supplier_name;
+        if (result.date)           payload.date = result.date;
+        if (result.total_amount)   payload.total_amount = result.total_amount;
+        if (result.vat_amount)     payload.vat_amount = result.vat_amount;
+
+        if (Object.keys(payload).length > 0) {
+          try {
+            const updated = await updateInvoice(invoiceId, payload as Parameters<typeof updateInvoice>[1]);
+            setInvoice(updated);
+          } catch { /* best effort */ }
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Extraction impossible";
+      setExtractionError(msg);
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center py-24">
@@ -110,6 +197,8 @@ export default function DocumentDetailPage() {
     }
   }
 
+  const displayName = invoice.supplier_name || invoice.invoice_number || 'Nouvelle facture';
+
   return (
     <>
       {/* Breadcrumb */}
@@ -122,13 +211,13 @@ export default function DocumentDetailPage() {
           {client.name}
         </button>
         <ChevronRight size={12} />
-        <span className="text-gray-700 font-medium font-mono">{invoice.invoice_number}</span>
+        <span className="text-gray-700 font-medium font-mono">{invoice.invoice_number || 'Facture'}</span>
       </nav>
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
-          onClick={() => navigate(`/clients/${clientId}`)}
+          onClick={() => navigate(-1)}
           className="h-8 w-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center
             text-gray-500 hover:text-gray-700 transition-colors"
         >
@@ -136,10 +225,12 @@ export default function DocumentDetailPage() {
         </button>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[18px] font-bold text-gray-900">{invoice.supplier_name}</h1>
+            <h1 className="text-[18px] font-bold text-gray-900">{displayName}</h1>
             <StatusBadge status={invoice.status} />
           </div>
-          <p className="text-[12px] text-gray-500 mt-0.5 font-mono">{invoice.invoice_number}</p>
+          {invoice.invoice_number && (
+            <p className="text-[12px] text-gray-500 mt-0.5 font-mono">{invoice.invoice_number}</p>
+          )}
         </div>
       </div>
 
@@ -157,7 +248,7 @@ export default function DocumentDetailPage() {
             Aperçu du document
           </p>
           <div style={{ height: '460px' }}>
-            <DocumentPreview fileUrl={undefined} />
+            <DocumentPreview documentId={invoice.document_id} />
           </div>
         </div>
 
@@ -168,8 +259,12 @@ export default function DocumentDetailPage() {
         >
           <InvoiceForm
             invoice={invoice}
+            extraction={extraction}
+            extracting={extracting}
+            extractionError={extractionError}
             onSave={handleSave}
             onValidate={handleValidate}
+            onReExtract={() => { extractionRan.current = false; runExtraction(); }}
           />
         </div>
 
@@ -180,8 +275,10 @@ export default function DocumentDetailPage() {
         <AccountingSection
           invoiceId={invoice.id}
           secteurActivite={client.secteur_activite}
+          regimeFiscal={client.regime_fiscal}
           totalAmount={invoice.total_amount}
           vatAmount={invoice.vat_amount}
+          accountingValidated={invoice.accounting_validated}
           onSaved={() => fetchData()}
         />
       </div>

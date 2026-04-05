@@ -24,6 +24,34 @@ class DocumentRead(BaseModel):
     uploaded_at: datetime
     status: DocumentStatus
     invoice_id: Optional[str] = None
+    invoice_status: Optional[str] = None
+
+
+class ManualInvoiceCreate(BaseModel):
+    invoice_number: Optional[str] = None
+    supplier_name: Optional[str] = None
+    date: Optional[str] = None
+    total_amount: Optional[float] = None
+    vat_amount: Optional[float] = None
+    direction: Optional[str] = None
+
+
+class ExtractionResult(BaseModel):
+    invoice_number: Optional[str] = None
+    date: Optional[str] = None
+    supplier_name: Optional[str] = None
+    total_amount: Optional[float] = None
+    vat_amount: Optional[float] = None
+    ht_amount: Optional[float] = None
+    vat_rate: float = 20
+    ice: Optional[str] = None
+    if_fiscal: Optional[str] = None
+    rc: Optional[str] = None
+    tp: Optional[str] = None
+    cnss: Optional[str] = None
+    currency: str = "MAD"
+    confidence: float = 0.0
+    raw_text: str = ""
 
 
 class PresignedUrlResponse(BaseModel):

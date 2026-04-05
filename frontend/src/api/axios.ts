@@ -48,11 +48,16 @@ apiClient.interceptors.response.use(
     const { status, data } = error.response;
 
     switch (true) {
-      case status === 401:
-        console.warn('[API] 401 — Non authentifié');
-        localStorage.removeItem('auth_token');
-        window.location.href = '/login';
+      case status === 401: {
+        const url = error.config?.url ?? '';
+        const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
+        if (!isAuthEndpoint) {
+          console.warn('[API] 401 — Non authentifié, redirection login');
+          localStorage.removeItem('auth_token');
+          window.location.href = '/login';
+        }
         break;
+      }
       case status === 403:
         console.warn('[API] 403 — Accès refusé');
         break;

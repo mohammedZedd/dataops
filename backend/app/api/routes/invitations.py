@@ -106,12 +106,19 @@ def invite_client(
     if not current_user.company_id:
         raise HTTPException(status_code=400, detail="Cabinet manquant pour l'admin.")
 
-    if payload.client_id:
-        client = db.get(Client, payload.client_id)
+    client_id = payload.client_id
+    if client_id:
+        client = db.get(Client, client_id)
         if not client:
             raise HTTPException(status_code=404, detail="Client introuvable.")
         if client.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="Client hors du cabinet.")
+    elif payload.company_name:
+        # Auto-create Client record from company_name
+        new_client = Client(name=payload.company_name.strip(), company_id=current_user.company_id)
+        db.add(new_client)
+        db.flush()
+        client_id = new_client.id
 
     # Reactivation path: email already exists but user is inactive
     existing_user = user_service.get_by_email(db, payload.email)
@@ -122,6 +129,9 @@ def invite_client(
                 detail="Un utilisateur actif existe déjà avec cet email.",
             )
         existing_user.is_active = True
+        # Link to client if user has no client_id
+        if not existing_user.client_id and client_id:
+            existing_user.client_id = client_id
         if existing_user.client_id:
             existing_client = db.get(Client, existing_user.client_id)
             if existing_client:
@@ -131,7 +141,7 @@ def invite_client(
 
     try:
         invitation = invitation_service.create_invitation(
-            db, inviter=current_user, payload=payload, role=UserRole.CLIENT, client_id=payload.client_id
+            db, inviter=current_user, payload=payload, role=UserRole.CLIENT, client_id=client_id
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))

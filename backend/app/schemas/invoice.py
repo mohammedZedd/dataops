@@ -39,15 +39,28 @@ class AccountSuggestion(BaseModel):
     code: str
     libelle: str
     type: str          # charge | tva | tiers | produit
-    montant_ht: Optional[float] = None
-    montant_tva: Optional[float] = None
-    montant_ttc: Optional[float] = None
+    sens: str          # debit | credit
+    montant: float = 0.0
     is_primary: bool = True
+    obligatoire: bool = True
+
+
+class RetenueSource(BaseModel):
+    applicable: bool = False
+    taux: float = 0
+    compte: Optional[str] = None
+    libelle: Optional[str] = None
+    note: Optional[str] = None
 
 
 class SuggestedAccountsResponse(BaseModel):
     direction: str
+    journal: str
     tva_rate: float
+    tva_regime: str
+    secteur: Optional[str] = None
+    regime_fiscal: Optional[str] = None
+    retenue_source: RetenueSource
     suggested_accounts: List[AccountSuggestion]
 
 

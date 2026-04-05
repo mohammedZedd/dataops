@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
 from app.db.dependencies import get_db
+from app.models.client import Client
 from app.models.user import User
 from app.models.user import UserRole
 from app.services import user_service
@@ -37,6 +38,14 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Accès révoqué.",
         )
+
+    if user.client_id:
+        client = db.get(Client, user.client_id)
+        if client and not client.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Accès révoqué.",
+            )
 
     return user
 
