@@ -17,6 +17,9 @@ import InvitationsPage from './pages/InvitationsPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ClientDocumentsPage from './pages/ClientDocumentsPage';
 import ProfilePage from './pages/ProfilePage';
+import TasksPage from './pages/TasksPage';
+import NotesPage from './pages/NotesPage';
+import TeamPage from './pages/TeamPage';
 
 export default function App() {
   return (
@@ -35,10 +38,13 @@ export default function App() {
               <Route path="clients" element={<ClientsListPage />} />
               <Route path="clients/:clientId" element={<ClientDetailPage />} />
               <Route path="clients/:clientId/invoices/:invoiceId" element={<DocumentDetailPage />} />
+              <Route path="tasks" element={<TasksPage />} />
+              <Route path="notes" element={<NotesPage />} />
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="chat" element={<ChatPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="accounting-entry" element={<AccountingEntryPage />} />
+              <Route path="team" element={<TeamPage />} />
               <Route path="invitations" element={<InvitationsPage />} />
               <Route path="client/documents" element={<ClientDocumentsPage />} />
               <Route path="client/messages" element={<ClientMessagesPage />} />

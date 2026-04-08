@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Mail, Users, UserPlus, Filter, CheckCircle, RefreshCw, Trash2 } from 'lucide-react';
-import { getInvitations, resendInvitation, revokeInvitation } from '../api/invitations';
+import { Mail, Users, UserPlus, Filter, CheckCircle, RefreshCw, Trash2, Pencil, X } from 'lucide-react';
+import { getInvitations, resendInvitation, revokeInvitation, updateInvitation, type InvitationUpdatePayload } from '../api/invitations';
 import { getClients } from '../api/clients';
 import { useAuth } from '../context/AuthContext';
 import type { Client, Invitation } from '../types';
@@ -90,6 +90,7 @@ export default function InvitationsPage() {
   const [showAccountantModal, setShowAccountantModal] = useState(false);
   const [showClientModal,     setShowClientModal]     = useState(false);
   const [confirmDeleteId,     setConfirmDeleteId]     = useState<string | null>(null);
+  const [editingInvitation,   setEditingInvitation]   = useState<Invitation | null>(null);
 
   // Inline filters
   const [activeCol,  setActiveCol]  = useState<FilterCol>(null);
@@ -151,6 +152,55 @@ export default function InvitationsPage() {
     } finally {
       setActioningId(null);
     }
+  }
+
+  async function handleUpdate(id: string, payload: InvitationUpdatePayload, resend: boolean) {
+    setActioningId(id);
+    setListError(null);
+    try {
+      const originalEmail = editingInvitation?.email;
+      console.debug('[InvitationsPage] PATCH /invitations/' + id, { payload, resend });
+      const updated = await updateInvitation(id, payload, resend);
+      setInvitations(prev => prev.map(i => (i.id === id ? updated : i)));
+      setEditingInvitation(null);
+      const emailChanged = payload.email && payload.email !== originalEmail;
+      if (resend || emailChanged) {
+        setSuccessMsg(`Invitation modifiée et renvoyée à ${updated.email}`);
+      } else {
+        setSuccessMsg('Invitation modifiée avec succès');
+      }
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: unknown) {
+      console.error('[InvitationsPage] updateInvitation failed:', err);
+      setListError(extractErrorMessage(err));
+    } finally {
+      setActioningId(null);
+    }
+  }
+
+  // Extracts a human-readable error from an axios error, handling:
+  //   - Network errors (no response)
+  //   - 4xx/5xx with `detail: string`
+  //   - 422 with `detail: [{ loc, msg, type }, ...]` (FastAPI validation errors)
+  function extractErrorMessage(err: unknown): string {
+    const e = err as {
+      message?: string;
+      response?: { status?: number; data?: { detail?: string | Array<{ loc?: unknown[]; msg?: string }> } };
+    };
+    if (!e.response) {
+      return `Erreur réseau: ${e.message ?? 'serveur injoignable'}`;
+    }
+    const status = e.response.status;
+    const detail = e.response.data?.detail;
+    if (typeof detail === 'string') return `${status} — ${detail}`;
+    if (Array.isArray(detail)) {
+      const msgs = detail.map(d => {
+        const field = Array.isArray(d.loc) ? d.loc.slice(1).join('.') : '';
+        return field ? `${field}: ${d.msg}` : (d.msg ?? '');
+      }).filter(Boolean).join(' · ');
+      return `${status} — ${msgs || 'Validation échouée'}`;
+    }
+    return `Erreur ${status} — Impossible de modifier l'invitation.`;
   }
 
   function openCol(col: FilterCol) {
@@ -360,6 +410,14 @@ export default function InvitationsPage() {
                     </td>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
+                        {effective !== 'accepted' && (
+                          <button onClick={() => setEditingInvitation(inv)} disabled={loading} title="Modifier"
+                            style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
+                            onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#EFF6FF'; b.style.borderColor = '#BFDBFE'; }}
+                            onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.borderColor = '#E5E7EB'; }}>
+                            <Pencil size={14} color="#6B7280" />
+                          </button>
+                        )}
                         {canResend && (
                           <button onClick={() => handleResend(inv.id)} disabled={loading} title="Renvoyer"
                             style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
@@ -400,6 +458,18 @@ export default function InvitationsPage() {
           onClose={() => setShowClientModal(false)}
           onCreated={handleCreated}
         />
+      )}
+
+      {/* Edit invitation modal */}
+      {editingInvitation && createPortal(
+        <EditInvitationModal
+          invitation={editingInvitation}
+          clients={clients}
+          saving={actioningId === editingInvitation.id}
+          onClose={() => setEditingInvitation(null)}
+          onSave={(payload, resend) => handleUpdate(editingInvitation.id, payload, resend)}
+        />,
+        document.body
       )}
 
       {/* Confirmation delete modal — rendered via portal to escape stacking contexts */}
@@ -468,3 +538,228 @@ export default function InvitationsPage() {
     </>
   );
 }
+
+// ─── Edit invitation modal ──────────────────────────────────────────────────
+
+interface EditInvitationModalProps {
+  invitation: Invitation;
+  clients: Client[];
+  saving: boolean;
+  onClose: () => void;
+  onSave: (payload: InvitationUpdatePayload, resend: boolean) => void;
+}
+
+function toDateInput(iso: string): string {
+  const d = new Date(iso);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function EditInvitationModal({ invitation, clients, saving, onClose, onSave }: EditInvitationModalProps) {
+  const expired = invitation.status === 'expired' || new Date(invitation.expires_at) < new Date();
+  const isAccepted = invitation.status === 'accepted';
+
+  const [email, setEmail] = useState(invitation.email);
+  const [firstName, setFirstName] = useState(invitation.first_name);
+  const [lastName, setLastName] = useState(invitation.last_name);
+  const [role, setRole] = useState<'accountant' | 'client'>(invitation.role as 'accountant' | 'client');
+  const [clientId, setClientId] = useState<string>(invitation.client_id || '');
+  const [clientSearch, setClientSearch] = useState('');
+  const [showClientList, setShowClientList] = useState(false);
+  const [expiresAt, setExpiresAt] = useState(toDateInput(invitation.expires_at));
+
+  // When switching role from client → accountant, clear client linkage
+  useEffect(() => {
+    if (role === 'accountant') setClientId('');
+  }, [role]);
+
+  const filteredClients = clients.filter(c =>
+    !clientSearch || c.name.toLowerCase().includes(clientSearch.toLowerCase())
+  );
+  const selectedClient = clients.find(c => c.id === clientId);
+
+  function buildPayload(): InvitationUpdatePayload {
+    // Always send all editable fields (the backend treats absent fields as "no change",
+    // but we want the request to actually fire and update the row regardless of stale
+    // change-detection). Sending the same value back is a safe no-op.
+    const payload: InvitationUpdatePayload = {
+      email: email.trim(),
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      role,
+      client_id: role === 'client' ? (clientId || null) : null,
+    };
+
+    // Safely compute the new expiry. If parsing fails, omit the field rather than crash.
+    if (expiresAt) {
+      const parsed = new Date(`${expiresAt}T23:59:59`);
+      if (!isNaN(parsed.getTime())) {
+        payload.expires_at = parsed.toISOString();
+      }
+    }
+    return payload;
+  }
+
+  function handleSave(resend: boolean) {
+    try {
+      // Basic client-side validation
+      if (!email.trim()) { alert("L'email est requis."); return; }
+      if (!firstName.trim() || !lastName.trim()) { alert("Le nom et le prénom sont requis."); return; }
+
+      const payload = buildPayload();
+
+      // Confirm if email is changing
+      if (payload.email && payload.email !== invitation.email) {
+        if (!confirm(`L'invitation sera renvoyée au nouvel email (${payload.email}). Confirmer ?`)) return;
+      }
+
+      onSave(payload, resend);
+    } catch (err) {
+      console.error('[EditInvitationModal] handleSave failed:', err);
+      alert("Impossible de préparer la requête. Vérifiez les champs.");
+    }
+  }
+
+  const statusBadge = (() => {
+    if (isAccepted) return { bg: '#F0FDF4', color: '#16A34A', border: '#BBF7D0', label: 'Acceptée' };
+    if (expired) return { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', label: 'Expirée' };
+    return { bg: '#FFFBEB', color: '#C2410C', border: '#FDE68A', label: 'En attente' };
+  })();
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999 }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: 560, maxHeight: '90vh', overflowY: 'auto',
+        background: '#fff', borderRadius: 14,
+        boxShadow: '0 25px 60px rgba(0,0,0,0.2)',
+        zIndex: 10000,
+      }}>
+        {/* Header */}
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827' }}>Modifier l'invitation</h3>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6B7280' }}>Mettre à jour les informations de l'invitation</p>
+          </div>
+          <button onClick={onClose} style={{ background: '#F3F4F6', border: 'none', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div style={{ padding: '20px 24px' }}>
+          {/* Read-only metadata */}
+          <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '12px 14px', marginBottom: 16, border: '1px solid #F3F4F6' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600 }}>Statut actuel</span>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 20,
+                background: statusBadge.bg, color: statusBadge.color, border: `1px solid ${statusBadge.border}`,
+              }}>
+                {statusBadge.label}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6B7280' }}>
+              <span>Date d'envoi initiale</span>
+              <span style={{ color: '#374151', fontWeight: 500 }}>{new Date(invitation.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            </div>
+          </div>
+
+          {/* Email */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lblStyle}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              disabled={isAccepted}
+              style={{ ...inputStyle, opacity: isAccepted ? 0.6 : 1, cursor: isAccepted ? 'not-allowed' : 'text' }}
+            />
+            {isAccepted && <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>L'email ne peut pas être modifié sur une invitation acceptée.</p>}
+          </div>
+
+          {/* Name */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div>
+              <label style={lblStyle}>Prénom</label>
+              <input value={firstName} onChange={e => setFirstName(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={lblStyle}>Nom</label>
+              <input value={lastName} onChange={e => setLastName(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+
+          {/* Role */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lblStyle}>Rôle</label>
+            <select value={role} onChange={e => setRole(e.target.value as 'accountant' | 'client')} style={inputStyle}>
+              <option value="accountant">Comptable</option>
+              <option value="client">Client</option>
+            </select>
+          </div>
+
+          {/* Client picker (only if role = client) */}
+          {role === 'client' && (
+            <div style={{ marginBottom: 14, position: 'relative' }}>
+              <label style={lblStyle}>Client lié</label>
+              <input
+                value={showClientList ? clientSearch : (selectedClient?.name || '')}
+                onChange={e => { setClientSearch(e.target.value); setShowClientList(true); }}
+                onFocus={() => { setShowClientList(true); setClientSearch(''); }}
+                placeholder="Rechercher un client..."
+                style={inputStyle}
+              />
+              {showClientList && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+                  <div onClick={() => { setClientId(''); setShowClientList(false); }} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: '#9CA3AF', borderBottom: '1px solid #F3F4F6' }}>— Aucun client</div>
+                  {filteredClients.length === 0 ? (
+                    <div style={{ padding: '12px', fontSize: 12, color: '#9CA3AF', textAlign: 'center' }}>Aucun client trouvé</div>
+                  ) : filteredClients.map(c => (
+                    <div key={c.id} onClick={() => { setClientId(c.id); setShowClientList(false); }}
+                      style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: '#374151', background: clientId === c.id ? '#EFF6FF' : '#fff' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
+                      onMouseLeave={e => (e.currentTarget.style.background = clientId === c.id ? '#EFF6FF' : '#fff')}>
+                      {c.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Expiry date */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={lblStyle}>Date d'expiration</label>
+            <input type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} style={inputStyle} />
+          </div>
+
+          {/* Buttons */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button onClick={onClose} disabled={saving}
+              style={{ padding: '9px 18px', background: '#fff', border: '1px solid #E5E7EB', color: '#374151', borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontSize: 13 }}>
+              Annuler
+            </button>
+            {expired && (
+              <button onClick={() => handleSave(true)} disabled={saving}
+                style={{ padding: '9px 18px', background: '#fff', border: '1px solid #BFDBFE', color: '#3B82F6', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                Enregistrer et renvoyer
+              </button>
+            )}
+            <button onClick={() => handleSave(false)} disabled={saving}
+              style={{ padding: '9px 20px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Modal styles ────────────────────────────────────────────────────────────
+const lblStyle: React.CSSProperties = { display: 'block', fontSize: 11, color: '#6B7280', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 };
+const inputStyle: React.CSSProperties = { width: '100%', height: 38, border: '1px solid #E5E7EB', borderRadius: 8, padding: '0 12px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };

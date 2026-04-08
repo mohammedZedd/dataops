@@ -15,6 +15,7 @@ from app.schemas.invitation import (
     InvitationClientCreate,
     InvitationPublicRead,
     InvitationRead,
+    InvitationUpdate,
 )
 from app.schemas.user import TokenResponse, UserRead
 from app.services import email_service, invitation_service, user_service
@@ -224,6 +225,122 @@ def resend_invitation(
             client_company_name=invitation.client_company_name or "",
             invite_link=invite_link,
         )
+
+
+@router.patch("/{invitation_id}", response_model=InvitationRead)
+def update_invitation(
+    invitation_id: str,
+    payload: InvitationUpdate,
+    resend: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    invitation = db.get(InvitationModel, invitation_id)
+    if not invitation or invitation.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Invitation introuvable.")
+    if invitation.status == InvitationStatus.ACCEPTED:
+        raise HTTPException(status_code=400, detail="Une invitation acceptée ne peut pas être modifiée.")
+
+    # `model_fields_set` tells us which fields the client actually sent (vs. defaulted to None).
+    # We use this so that `client_id: null` (explicit) means "clear the linkage", whereas
+    # an absent `client_id` means "don't touch it".
+    sent = payload.model_fields_set
+
+    email_changed = False
+    if "email" in sent and payload.email and payload.email != invitation.email:
+        # Make sure no user already exists with the new email
+        if user_service.get_by_email(db, payload.email):
+            raise HTTPException(status_code=409, detail="Un utilisateur existe déjà avec cet email.")
+        invitation.email = payload.email
+        email_changed = True
+
+    if "first_name" in sent and payload.first_name:
+        invitation.first_name = payload.first_name
+    if "last_name" in sent and payload.last_name:
+        invitation.last_name = payload.last_name
+
+    # Role change handling
+    if "role" in sent and payload.role is not None and payload.role != invitation.role:
+        if payload.role not in (UserRole.ACCOUNTANT, UserRole.CLIENT):
+            raise HTTPException(status_code=400, detail="Rôle invalide.")
+        invitation.role = payload.role
+        # Switching to accountant clears any client linkage
+        if payload.role == UserRole.ACCOUNTANT:
+            invitation.client_id = None
+            invitation.client_company_name = None
+
+    # Client linkage (only relevant for CLIENT role)
+    # `client_id` field present in request:
+    #   - None (or "") → clear linkage
+    #   - non-empty string → look up and assign
+    if "client_id" in sent and invitation.role == UserRole.CLIENT:
+        if not payload.client_id:
+            invitation.client_id = None
+            invitation.client_company_name = None
+        else:
+            client = db.get(Client, payload.client_id)
+            if not client or client.company_id != current_user.company_id:
+                raise HTTPException(status_code=404, detail="Client introuvable.")
+            invitation.client_id = payload.client_id
+            invitation.client_company_name = client.name
+
+    # Expiry update — only if explicitly provided
+    if "expires_at" in sent and payload.expires_at is not None:
+        # Strip timezone info if present (DB column is naive datetime)
+        new_exp = payload.expires_at
+        if new_exp.tzinfo is not None:
+            new_exp = new_exp.replace(tzinfo=None)
+        invitation.expires_at = new_exp
+
+    # If was expired (or now in the past), reset to pending and refresh expiry/token
+    now = invitation_service._now()
+    was_expired = invitation.status == InvitationStatus.EXPIRED or (
+        invitation.expires_at and invitation.expires_at <= now
+    )
+    if was_expired:
+        invitation.status = InvitationStatus.PENDING
+        if "expires_at" not in sent or invitation.expires_at <= now:
+            invitation.expires_at = invitation_service._expires_at()
+
+    # Email change invalidates the old token
+    if email_changed:
+        invitation.token = invitation_service._generate_token(db)
+        invitation.status = InvitationStatus.PENDING
+        if "expires_at" not in sent:
+            invitation.expires_at = invitation_service._expires_at()
+
+    try:
+        db.commit()
+        db.refresh(invitation)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erreur de base de données: {exc}")
+
+    # Optionally resend the email — never let SMTP failure block the update
+    if resend or email_changed:
+        try:
+            invite_link = f"{settings.FRONTEND_URL}/accept-invitation?token={invitation.token}"
+            if invitation.role == UserRole.ACCOUNTANT:
+                email_service.send_invitation_accountant_email(
+                    to_email=invitation.email,
+                    first_name=invitation.first_name,
+                    cabinet_name=current_user.company.name,
+                    invite_link=invite_link,
+                )
+            else:
+                email_service.send_invitation_client_email(
+                    to_email=invitation.email,
+                    first_name=invitation.first_name,
+                    cabinet_name=current_user.company.name,
+                    client_company_name=invitation.client_company_name or "",
+                    invite_link=invite_link,
+                )
+        except Exception as exc:  # pragma: no cover
+            # Log but don't fail the request — the invitation update succeeded.
+            import logging
+            logging.getLogger(__name__).warning("Échec d'envoi email d'invitation: %s", exc)
+
+    return _invitation_to_read(db, invitation)
 
 
 @router.post("/accept", response_model=TokenResponse)

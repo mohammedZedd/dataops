@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.db.dependencies import get_db
 from app.dependencies.auth import get_current_user
 from app.models.client_note import ClientTask, TaskComment, ClientNote
+from app.models.client import Client
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/clients", tags=["tasks-notes"])
+global_router = APIRouter(tags=["tasks-notes-global"])
 
 _MONTH_NAMES = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
                 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -210,19 +212,24 @@ class NoteCreate(BaseModel):
     title: Optional[str] = None
     content: str
     color: str = "yellow"
+    tags: Optional[str] = None
+    client_id: Optional[str] = None
 
 
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     color: Optional[str] = None
+    tags: Optional[str] = None
 
 
-def _note_dict(note: ClientNote, author: User | None):
+def _note_dict(note: ClientNote, author: User | None, client: Client | None = None):
     name = f"{author.first_name} {author.last_name}" if author else "?"
     return {
         "id": note.id, "title": note.title, "content": note.content, "color": note.color,
-        "is_pinned": note.is_pinned, "created_at": note.created_at.isoformat(), "updated_at": note.updated_at.isoformat(),
+        "is_pinned": note.is_pinned, "tags": note.tags or "",
+        "client_id": note.client_id, "client_name": client.name if client else None,
+        "created_at": note.created_at.isoformat(), "updated_at": note.updated_at.isoformat(),
         "author": {"id": author.id if author else None, "name": name, "initials": name[:2].upper()},
     }
 
@@ -242,9 +249,10 @@ def create_note(client_id: str, payload: NoteCreate, db: Session = Depends(get_d
     if not payload.content.strip(): raise HTTPException(status_code=400, detail="Le contenu est requis.")
     note = ClientNote(client_id=client_id, company_id=current_user.company_id, author_id=current_user.id,
         title=payload.title.strip() if payload.title else None, content=payload.content.strip(),
-        color=payload.color if payload.color in ("yellow", "blue", "green", "pink", "gray") else "yellow")
+        color=payload.color if payload.color in ("yellow", "blue", "green", "pink", "gray") else "yellow",
+        tags=payload.tags or None)
     db.add(note); db.commit(); db.refresh(note)
-    return _note_dict(note, current_user)
+    return _note_dict(note, current_user, db.get(Client, note.client_id))
 
 
 @router.patch("/{client_id}/notes/{note_id}")
@@ -255,8 +263,9 @@ def update_note(client_id: str, note_id: str, payload: NoteUpdate, db: Session =
     if payload.title is not None: note.title = payload.title.strip() or None
     if payload.content is not None: note.content = payload.content.strip()
     if payload.color is not None and payload.color in ("yellow", "blue", "green", "pink", "gray"): note.color = payload.color
+    if payload.tags is not None: note.tags = payload.tags or None
     note.updated_at = datetime.utcnow(); db.commit(); db.refresh(note)
-    return _note_dict(note, db.get(User, note.author_id))
+    return _note_dict(note, db.get(User, note.author_id), db.get(Client, note.client_id))
 
 
 @router.patch("/{client_id}/notes/{note_id}/pin")
@@ -275,3 +284,56 @@ def delete_note(client_id: str, note_id: str, db: Session = Depends(get_db), cur
     if not note: raise HTTPException(status_code=404, detail="Note non trouvée.")
     db.delete(note); db.commit()
     return {"status": "deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GLOBAL endpoints (company-wide) — for Tâches and Notes pages
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@global_router.get("/tasks")
+def list_all_tasks(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _check_staff(current_user)
+    tasks = db.scalars(
+        select(ClientTask).where(ClientTask.company_id == current_user.company_id)
+        .order_by(ClientTask.due_date.is_(None), ClientTask.due_date.asc(), ClientTask.created_at.desc())
+    ).all()
+
+    user_ids = list({t.assigned_to_id for t in tasks if t.assigned_to_id} | {t.created_by_id for t in tasks})
+    users_map = {u.id: u for u in db.scalars(select(User).where(User.id.in_(user_ids))).all()} if user_ids else {}
+    client_ids = list({t.client_id for t in tasks if t.client_id})
+    clients_map = {c.id: c for c in db.scalars(select(Client).where(Client.id.in_(client_ids))).all()} if client_ids else {}
+
+    accountants = db.scalars(select(User).where(User.company_id == current_user.company_id, User.role.in_([UserRole.ADMIN, UserRole.ACCOUNTANT]))).all()
+    all_clients = db.scalars(select(Client).where(Client.company_id == current_user.company_id)).all()
+
+    items = []
+    for t in tasks:
+        d = _task_dict(t, users_map.get(t.assigned_to_id), users_map.get(t.created_by_id))
+        c = clients_map.get(t.client_id)
+        d["client_id"] = t.client_id
+        d["client_name"] = c.name if c else None
+        items.append(d)
+
+    return {
+        "tasks": items,
+        "accountants": [_user_brief(u) for u in accountants],
+        "clients": [{"id": c.id, "name": c.name} for c in all_clients],
+    }
+
+
+@global_router.get("/notes")
+def list_all_notes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _check_staff(current_user)
+    notes = db.scalars(
+        select(ClientNote).where(ClientNote.company_id == current_user.company_id)
+        .order_by(ClientNote.is_pinned.desc(), ClientNote.updated_at.desc())
+    ).all()
+    author_ids = list({n.author_id for n in notes})
+    authors = {u.id: u for u in db.scalars(select(User).where(User.id.in_(author_ids))).all()} if author_ids else {}
+    client_ids = list({n.client_id for n in notes if n.client_id})
+    clients_map = {c.id: c for c in db.scalars(select(Client).where(Client.id.in_(client_ids))).all()} if client_ids else {}
+    all_clients = db.scalars(select(Client).where(Client.company_id == current_user.company_id)).all()
+    return {
+        "notes": [_note_dict(n, authors.get(n.author_id), clients_map.get(n.client_id)) for n in notes],
+        "clients": [{"id": c.id, "name": c.name} for c in all_clients],
+    }

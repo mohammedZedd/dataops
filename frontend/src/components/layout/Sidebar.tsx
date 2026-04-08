@@ -11,6 +11,9 @@ import {
   History,
   MessageSquare,
   UserCircle,
+  CheckSquare,
+  StickyNote,
+  Users2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import type { User } from '../../types';
@@ -28,6 +31,8 @@ const NAV_ADMIN: { section: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'Tableau de bord', icon: <LayoutDashboard size={16} />, end: true },
       { to: '/clients', label: 'Clients', icon: <Users size={16} /> },
+      { to: '/tasks', label: 'Tâches', icon: <CheckSquare size={16} /> },
+      { to: '/notes', label: 'Notes', icon: <StickyNote size={16} /> },
       { to: '/documents', label: 'Documents', icon: <FileText size={16} /> },
       { to: '/accounting-entry', label: 'Création comptable', icon: <BookOpen size={16} /> },
       { to: '/chat', label: 'Messages', icon: <MessageSquare size={16} /> },
@@ -36,6 +41,7 @@ const NAV_ADMIN: { section: string; items: NavItem[] }[] = [
   {
     section: 'Compte',
     items: [
+      { to: '/team', label: 'Équipe', icon: <Users2 size={16} /> },
       { to: '/invitations', label: 'Invitations', icon: <Users size={16} /> },
       { to: '/profile', label: 'Mon profil', icon: <UserCircle size={16} /> },
       { to: '/settings', label: 'Paramètres', icon: <Settings size={16} /> },

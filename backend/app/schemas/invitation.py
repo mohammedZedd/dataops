@@ -25,6 +25,17 @@ class InvitationClientCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+class InvitationUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    role: Optional[UserRole] = None
+    client_id: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class InvitationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
