@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     SES_SENDER_EMAIL: str = "noreply@dataops.ma"
     S3_BUCKET_NAME: str = "dataops"
 
+    # ─── Anthropic / AI agent ────────────────────────────────────────────────
+    ANTHROPIC_API_KEY: str = ""
+
     class Config:
         env_file = ".env"
 

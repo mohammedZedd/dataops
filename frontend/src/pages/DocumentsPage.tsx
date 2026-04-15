@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Loader2, FolderOpen, AlertTriangle, FileText, ImageIcon,
-  FileSpreadsheet, Mic, Eye, ClipboardList, Download, X, ChevronLeft, ChevronRight,
+  FileSpreadsheet, Mic, Eye, ClipboardList, Download, X, ChevronLeft, ChevronRight, Sparkles, CheckCircle,
 } from 'lucide-react';
 import { getAllDocuments, getDocumentStats, getDocumentsByClientSummary, getPresignedPreviewUrl, getPresignedDownloadUrl, createInvoiceFromDocument, markDocumentViewed } from '../api/documents';
+import apiClient from '../api/axios';
 import { formatRelDate as relDate } from '../utils/dateUtils';
 import type { DocumentStats, ClientDocSummary, AdminClientDoc } from '../api/documents';
 
@@ -98,6 +99,77 @@ export default function DocumentsPage() {
 
   // Actions
   const [creatingInv, setCreatingInv] = useState<string | null>(null);
+
+  // ─── AI agent ────────────────────────────────────────────────────────────
+  interface AIAnalysisResult {
+    id: string;
+    document_id: string;
+    document_type: string | null;
+    confidence: number;
+    extraction_data: Record<string, unknown> | null;
+    accounting_entries: Array<{ compte_debit: string; libelle_debit?: string; compte_credit: string; libelle_credit?: string; montant: number; description?: string }> | null;
+    tva_details: { tva_collectee?: number; tva_deductible?: number; regime?: string; taux_principal?: number } | null;
+    alerts: string[];
+    suggestions: string[];
+    status: string;
+    created_at: string;
+  }
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [analyses, setAnalyses] = useState<Record<string, AIAnalysisResult>>({});
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [selectedAnalysis, setSelectedAnalysis] = useState<AIAnalysisResult | null>(null);
+  const [aiToast, setAiToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
+  const [validating, setValidating] = useState(false);
+
+  async function handleAnalyzeDocument(docId: string) {
+    setAnalyzingId(docId);
+    try {
+      const { data } = await apiClient.post<AIAnalysisResult>(`/ai/analyze/${docId}`);
+      setAnalyses(prev => ({ ...prev, [docId]: data }));
+      setSelectedAnalysis(data);
+      setShowAIModal(true);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Erreur d'analyse IA";
+      setAiToast({ kind: 'err', msg: detail });
+      setTimeout(() => setAiToast(null), 4000);
+    } finally {
+      setAnalyzingId(null);
+    }
+  }
+
+  async function handleValidateAnalysis() {
+    if (!selectedAnalysis) return;
+    setValidating(true);
+    try {
+      const { data } = await apiClient.post<{ entries_created: number }>(
+        `/ai/validate/${selectedAnalysis.id}`,
+        { accounting_entries: selectedAnalysis.accounting_entries },
+      );
+      setAiToast({ kind: 'ok', msg: `${data.entries_created} écriture(s) créée(s) ✓` });
+      setShowAIModal(false);
+      setTimeout(() => setAiToast(null), 4000);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Erreur de validation";
+      setAiToast({ kind: 'err', msg: detail });
+      setTimeout(() => setAiToast(null), 4000);
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  function getDocTypeLabel(t: string | null): string {
+    return ({
+      facture_achat: 'Facture d\'achat',
+      facture_vente: 'Facture de vente',
+      releve_bancaire: 'Relevé bancaire',
+      note_frais: 'Note de frais',
+      autre: 'Document',
+    } as Record<string, string>)[t || ''] || 'Document';
+  }
+  function fmtMad(n: number | null | undefined): string {
+    if (n == null) return '—';
+    return `${n.toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD`;
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -380,6 +452,19 @@ export default function DocumentsPage() {
                     <td style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 4 }}>
                         {!isAudio && <Btn onClick={() => handlePreview(doc)} title="Prévisualiser" hBg="#EFF6FF" hCol="#3B82F6"><Eye size={14} /></Btn>}
+                        {!isAudio && (
+                          <Btn
+                            onClick={() => handleAnalyzeDocument(doc.id)}
+                            title={analyses[doc.id] ? 'Voir l\'analyse IA' : 'Analyser avec IA'}
+                            hBg="#F5F3FF" hCol="#7C3AED"
+                            disabled={analyzingId === doc.id}
+                            active={!!analyses[doc.id]}
+                          >
+                            {analyzingId === doc.id
+                              ? <Loader2 size={14} className="animate-spin" />
+                              : <Sparkles size={14} />}
+                          </Btn>
+                        )}
                         {!isAudio && !doc.invoice_id && <Btn onClick={() => handleCreate(doc)} title="Créer facture" hBg="#FFF7ED" hCol="#EA580C" disabled={creatingInv === doc.id}>{creatingInv === doc.id ? <Loader2 size={14} className="animate-spin" /> : <ClipboardList size={14} />}</Btn>}
                         <Btn onClick={() => handleDownload(doc.id)} title="Télécharger" hBg="#F0FDF4" hCol="#16A34A"><Download size={14} /></Btn>
                       </div>
@@ -412,6 +497,180 @@ export default function DocumentsPage() {
           </div>
         </div>
       )}
+
+      {/* AI toast */}
+      {aiToast && (
+        <div style={{ position: 'fixed', top: 20, right: 20, background: aiToast.kind === 'ok' ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${aiToast.kind === 'ok' ? '#BBF7D0' : '#FECACA'}`, color: aiToast.kind === 'ok' ? '#16A34A' : '#DC2626', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, zIndex: 11000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {aiToast.kind === 'ok' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+          {aiToast.msg}
+        </div>
+      )}
+
+      {/* AI analysis modal */}
+      {showAIModal && selectedAnalysis && (
+        <>
+          <div onClick={() => setShowAIModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 780, maxHeight: '90vh', background: '#fff', borderRadius: 18, boxShadow: '0 25px 60px rgba(0,0,0,0.2)', zIndex: 10000, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+
+            {/* Header */}
+            <div style={{ background: 'linear-gradient(135deg,#7C3AED,#2563EB)', padding: '20px 28px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={18} /> Analyse IA — Résultats
+                </h2>
+                <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>
+                  Confiance : {Math.round((selectedAnalysis.confidence || 0) * 100)}% · Type : {getDocTypeLabel(selectedAnalysis.document_type)}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{
+                  background: selectedAnalysis.confidence > 0.8 ? 'rgba(34,197,94,0.2)' : 'rgba(245,158,11,0.2)',
+                  color: selectedAnalysis.confidence > 0.8 ? '#86EFAC' : '#FDE68A',
+                  border: `1px solid ${selectedAnalysis.confidence > 0.8 ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                  borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 600,
+                }}>
+                  {selectedAnalysis.confidence > 0.8 ? '✓ Haute confiance' : '⚠ Vérifier'}
+                </span>
+                <button onClick={() => setShowAIModal(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+
+              {/* Alerts */}
+              {selectedAnalysis.alerts && selectedAnalysis.alerts.length > 0 && (
+                <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
+                  {selectedAnalysis.alerts.map((alert, i) => (
+                    <div key={i} style={{ fontSize: 13, color: '#C2410C', display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: i < selectedAnalysis.alerts.length - 1 ? 4 : 0 }}>
+                      <AlertTriangle size={13} style={{ marginTop: 2, flexShrink: 0 }} /> {alert}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Extracted data */}
+              {selectedAnalysis.extraction_data && (
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: '#111827', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Données extraites
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {(() => {
+                      const ext = selectedAnalysis.extraction_data as Record<string, unknown>;
+                      const fournisseur = (ext.fournisseur || {}) as Record<string, string>;
+                      const totaux = (ext.totaux || {}) as Record<string, number>;
+                      const fields: { label: string; value: string | null; highlight?: boolean }[] = [
+                        { label: 'N° Facture', value: (ext.numero_facture as string) || null },
+                        { label: 'Date', value: (ext.date as string) || null },
+                        { label: 'Fournisseur', value: fournisseur.nom || null },
+                        { label: 'ICE Fournisseur', value: fournisseur.ice || null },
+                        { label: 'Total HT', value: totaux.total_ht ? fmtMad(totaux.total_ht) : null },
+                        { label: 'Total TVA', value: totaux.total_tva ? fmtMad(totaux.total_tva) : null },
+                        { label: 'Total TTC', value: totaux.total_ttc ? fmtMad(totaux.total_ttc) : null, highlight: true },
+                        { label: 'Mode paiement', value: (ext.mode_paiement as string) || null },
+                      ];
+                      return fields.filter(f => f.value).map((f, i) => (
+                        <div key={i} style={{ background: f.highlight ? '#F0FDF4' : '#F9FAFB', borderRadius: 8, padding: '10px 14px', border: f.highlight ? '1px solid #BBF7D0' : '1px solid #F3F4F6' }}>
+                          <div style={{ fontSize: 10, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>{f.label}</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: f.highlight ? '#16A34A' : '#111827' }}>{f.value}</div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* TVA */}
+              {selectedAnalysis.tva_details && (selectedAnalysis.tva_details.tva_collectee != null || selectedAnalysis.tva_details.tva_deductible != null) && (
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: '#111827', textTransform: 'uppercase', letterSpacing: 0.5 }}>Détail TVA</h3>
+                  <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>TVA Collectée</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#DC2626' }}>{fmtMad(selectedAnalysis.tva_details.tva_collectee || 0)}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>TVA Déductible</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#16A34A' }}>{fmtMad(selectedAnalysis.tva_details.tva_deductible || 0)}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4 }}>TVA Nette</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#1D4ED8' }}>{fmtMad((selectedAnalysis.tva_details.tva_collectee || 0) - (selectedAnalysis.tva_details.tva_deductible || 0))}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Accounting entries */}
+              {selectedAnalysis.accounting_entries && selectedAnalysis.accounting_entries.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: '#111827', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>Écritures comptables proposées</span>
+                    <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>CGNC / Plan Comptable Marocain</span>
+                  </h3>
+                  <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 2fr 1.2fr', background: '#0F172A', color: '#94A3B8', padding: '10px 14px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+                      <div>Cpt Débit</div><div>Libellé Débit</div><div>Cpt Crédit</div><div>Libellé Crédit</div><div style={{ textAlign: 'right' }}>Montant</div>
+                    </div>
+                    {selectedAnalysis.accounting_entries.map((e, i) => (
+                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 2fr 1.2fr', padding: '12px 14px', fontSize: 12, borderBottom: i < (selectedAnalysis.accounting_entries?.length || 0) - 1 ? '1px solid #F3F4F6' : 'none', alignItems: 'center', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                        <div style={{ fontWeight: 700, color: '#3B82F6', fontFamily: 'monospace' }}>{e.compte_debit}</div>
+                        <div style={{ color: '#374151' }}>{e.libelle_debit}</div>
+                        <div style={{ fontWeight: 700, color: '#16A34A', fontFamily: 'monospace' }}>{e.compte_credit}</div>
+                        <div style={{ color: '#374151' }}>{e.libelle_credit}</div>
+                        <div style={{ textAlign: 'right', fontWeight: 600, color: '#111827' }}>{fmtMad(e.montant)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Suggestions */}
+              {selectedAnalysis.suggestions && selectedAnalysis.suggestions.length > 0 && (
+                <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#16A34A', marginBottom: 8 }}>Suggestions IA</div>
+                  {selectedAnalysis.suggestions.map((s, i) => (
+                    <div key={i} style={{ fontSize: 12, color: '#166534', marginBottom: 4 }}>→ {s}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '16px 28px', borderTop: '1px solid #E5E7EB', background: '#F9FAFB', display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>
+                Statut : {selectedAnalysis.status === 'validated' ? '✓ Validée' : 'En attente de validation'}
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setShowAIModal(false)} style={{ padding: '10px 20px', background: '#fff', border: '1px solid #E5E7EB', color: '#374151', borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontSize: 13 }}>
+                  Fermer
+                </button>
+                <button
+                  onClick={handleValidateAnalysis}
+                  disabled={validating || selectedAnalysis.status === 'validated' || !selectedAnalysis.accounting_entries || selectedAnalysis.accounting_entries.length === 0}
+                  style={{
+                    padding: '10px 24px',
+                    background: selectedAnalysis.status === 'validated' ? '#9CA3AF' : 'linear-gradient(135deg,#16A34A,#15803D)',
+                    color: '#fff', border: 'none', borderRadius: 8,
+                    cursor: validating ? 'wait' : (selectedAnalysis.status === 'validated' ? 'not-allowed' : 'pointer'),
+                    fontWeight: 600, fontSize: 13,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    opacity: validating ? 0.7 : 1,
+                  }}
+                >
+                  {validating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                  {validating ? 'Validation…' : 'Valider et créer les écritures'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -434,12 +693,14 @@ function Kpi({ icon, bg, val, col, label, sub, subCol, onClick, active, accentCo
   );
 }
 
-function Btn({ onClick, title, hBg, hCol, disabled, children }: { onClick: () => void; title: string; hBg: string; hCol: string; disabled?: boolean; children: React.ReactNode }) {
+function Btn({ onClick, title, hBg, hCol, disabled, active, children }: { onClick: () => void; title: string; hBg: string; hCol: string; disabled?: boolean; active?: boolean; children: React.ReactNode }) {
+  const baseBg = active ? hBg : 'transparent';
+  const baseCol = active ? hCol : '#9CA3AF';
   return (
     <button onClick={onClick} disabled={disabled} title={title}
-      style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent', cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', transition: 'all 0.15s', opacity: disabled ? 0.5 : 1 }}
+      style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: baseBg, cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: baseCol, transition: 'all 0.15s', opacity: disabled ? 0.5 : 1 }}
       onMouseEnter={e => { if (!disabled) { (e.currentTarget as HTMLButtonElement).style.background = hBg; (e.currentTarget as HTMLButtonElement).style.color = hCol; } }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#9CA3AF'; }}>
+      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = baseBg; (e.currentTarget as HTMLButtonElement).style.color = baseCol; }}>
       {children}
     </button>
   );
