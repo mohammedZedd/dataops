@@ -25,12 +25,12 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL:    ${PGADMIN_EMAIL:-admin@admin.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-      PGADMIN_CONFIG_SERVER_MODE: "False"          # single-user mode, pas de login
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
       - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
-      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro  # connexion auto à la DB
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
     depends_on:
       db:
         condition: service_healthy
@@ -41,19 +41,33 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
+      # ── App ────────────────────────────────────────────────────────────────
+      # DATABASE_URL réécrite pour pointer sur le service "db" (pas localhost)
       DATABASE_URL: postgresql://${POSTGRES_USER:-payfit}:${POSTGRES_PASSWORD:-payfit}@db:5432/${POSTGRES_DB:-payfit}
-      DEBUG: "true"
+      DEBUG: ${DEBUG:-true}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      # ── JWT ────────────────────────────────────────────────────────────────
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+      # ── AWS ────────────────────────────────────────────────────────────────
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_REGION: ${AWS_REGION}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      AWS_REGION: ${AWS_REGION:-eu-west-3}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-dataopsdepot}
+      SES_SENDER_EMAIL: ${SES_SENDER_EMAIL:-noreply@dataops.ma}
+      # ── SMTP (prioritaire sur SES si SMTP_HOST est défini) ─────────────────
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app        # hot reload : les modifications sont prises en compte sans rebuild
+      - ./backend:/app        # hot reload
     depends_on:
       db:
         condition: service_healthy
@@ -65,12 +79,12 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:8000   # le navigateur appelle le backend directement
+      VITE_API_URL: http://localhost:8000
     ports:
       - "5173:5173"
     volumes:
-      - ./frontend:/app                    # hot reload
-      - /app/node_modules                  # préserve node_modules du container
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
 

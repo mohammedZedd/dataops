@@ -1,6 +1,17 @@
 import apiClient from './axios';
 import type { Client, ClientUser } from '../types';
 
+// ─── Assignation comptable ↔ clients ─────────────────────────────────────────
+
+export async function getAssignedClients(memberId: string): Promise<{ id: string; name: string }[]> {
+  const { data } = await apiClient.get(`/team/${memberId}/assigned-clients`);
+  return data;
+}
+
+export async function setAssignedClients(memberId: string, clientIds: string[]): Promise<void> {
+  await apiClient.put(`/team/${memberId}/assigned-clients`, { client_ids: clientIds });
+}
+
 // ─── Lecture ──────────────────────────────────────────────────────────────────
 
 export async function getClientUsers(): Promise<ClientUser[]> {

@@ -11,6 +11,7 @@ from app.dependencies.auth import get_current_user
 from app.models.client_note import ClientTask, TaskComment, ClientNote
 from app.models.client import Client
 from app.models.user import User, UserRole
+from app.services.notification_service import notify_users
 
 router = APIRouter(prefix="/clients", tags=["tasks-notes"])
 global_router = APIRouter(tags=["tasks-notes-global"])
@@ -138,6 +139,7 @@ def update_task(client_id: str, task_id: str, payload: TaskUpdate, db: Session =
     if payload.description is not None: task.description = payload.description.strip() or None
     if payload.task_type is not None and payload.task_type in _VALID_TYPES: task.task_type = payload.task_type
     if payload.priority is not None and payload.priority in _VALID_PRIORITIES: task.priority = payload.priority
+    prev_assignee_id = task.assigned_to_id
     if payload.assigned_to_id is not None: task.assigned_to_id = payload.assigned_to_id or None
     if payload.due_date is not None:
         if payload.due_date:
@@ -151,7 +153,28 @@ def update_task(client_id: str, task_id: str, payload: TaskUpdate, db: Session =
         if payload.status == 'done': task.progress = 100; task.completed_at = datetime.utcnow()
         elif payload.status == 'in_progress' and task.progress == 0: task.progress = 30
         elif payload.status == 'todo': task.progress = 0; task.completed_at = None
-    task.updated_at = datetime.utcnow(); db.commit(); db.refresh(task)
+    task.updated_at = datetime.utcnow()
+
+    # Notify new assignee if the assignment changed
+    new_assignee_id = task.assigned_to_id
+    if (payload.assigned_to_id is not None
+            and new_assignee_id
+            and new_assignee_id != prev_assignee_id
+            and new_assignee_id != current_user.id):
+        assigner_name = f"{current_user.first_name} {current_user.last_name}"
+        notify_users(
+            db=db,
+            company_id=current_user.company_id,
+            recipient_ids=[new_assignee_id],
+            type="task_assigned",
+            title=f"Tâche assignée : {task.title[:60]}",
+            message=f"{assigner_name} vous a assigné cette tâche.",
+            link=f"/tasks",
+            client_id=task.client_id,
+            task_id=task.id,
+        )
+
+    db.commit(); db.refresh(task)
     return _task_dict(task, db.get(User, task.assigned_to_id) if task.assigned_to_id else None, db.get(User, task.created_by_id))
 
 
@@ -199,6 +222,27 @@ def add_comment(client_id: str, task_id: str, payload: CommentCreate, db: Sessio
     comment = TaskComment(task_id=task_id, author_id=current_user.id, content=payload.content.strip())
     db.add(comment)
     task.comments_count = (task.comments_count or 0) + 1
+
+    # Notify all task participants except the commenter
+    participants = {task.created_by_id}
+    if task.assigned_to_id:
+        participants.add(task.assigned_to_id)
+    participants.discard(current_user.id)
+    if participants:
+        author_name = f"{current_user.first_name} {current_user.last_name}"
+        preview = payload.content.strip()[:80]
+        notify_users(
+            db=db,
+            company_id=current_user.company_id,
+            recipient_ids=list(participants),
+            type="task_comment",
+            title=f"Commentaire sur « {task.title[:60]} »",
+            message=f"{author_name} : {preview}{'…' if len(payload.content.strip()) > 80 else ''}",
+            link=f"/tasks",
+            client_id=task.client_id,
+            task_id=task.id,
+        )
+
     db.commit(); db.refresh(comment)
     name = f"{current_user.first_name} {current_user.last_name}"
     return {"id": comment.id, "content": comment.content, "created_at": comment.created_at.isoformat(), "author_name": name, "author_initials": name[:2].upper()}

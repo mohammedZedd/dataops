@@ -376,6 +376,31 @@ def list_all_documents(
     return [document_service._to_read(d) for d in docs]
 
 
+@router.patch("/documents/received/mark-all-viewed")
+def mark_all_received_as_viewed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Marque tous les documents reçus du cabinet (source=cabinet) comme vus pour le client connecté."""
+    if current_user.role != UserRole.CLIENT:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Clients uniquement.")
+    if not current_user.client_id:
+        return {"updated": 0}
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.client_id == current_user.client_id,
+            Document.source == "cabinet",
+            Document.is_new == True,  # noqa: E712
+        )
+        .all()
+    )
+    for doc in docs:
+        doc.is_new = False
+    db.commit()
+    return {"updated": len(docs)}
+
+
 @router.patch("/documents/{document_id}/viewed")
 def mark_document_viewed(
     document_id: str,

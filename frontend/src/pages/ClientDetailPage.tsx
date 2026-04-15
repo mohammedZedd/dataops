@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import axios from 'axios';
+import { useToast } from '../context/ToastContext';
 import {
   ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Calendar,
   User, Mail, Phone, Building2, Briefcase, FileText, ImageIcon,
@@ -70,6 +72,7 @@ function isAudioDoc(doc: AdminClientDoc): boolean {
 export default function ClientDetailPage() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'details';
   const highlightDocId = searchParams.get('highlight');
@@ -126,6 +129,11 @@ export default function ClientDetailPage() {
       if (groups.length > 0) setExpanded(new Set([groups[0].key]));
       setClientUser(users.find(u => u.client_id === clientId) ?? null);
     } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 403) {
+        toast.error('Accès refusé — ce client ne vous est pas assigné.');
+        navigate('/clients');
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Erreur de chargement.');
     } finally { setLoading(false); }
   }, [clientId]);
@@ -257,7 +265,7 @@ export default function ClientDetailPage() {
       </button>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 20, borderBottom: '1px solid #E5E7EB', marginBottom: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14, paddingBottom: 20, borderBottom: '1px solid #E5E7EB', marginBottom: 0 }}>
         <div style={{ height: 48, width: 48, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 17, fontWeight: 700 }}>
           {initials}
         </div>
@@ -275,7 +283,7 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '2px solid #F3F4F6', marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '2px solid #F3F4F6', marginBottom: 28, overflowX: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
         {[
           { key: 'details', label: 'Détails du client', icon: <User size={16} /> },
           { key: 'documents', label: 'Documents', icon: <FileText size={16} /> },
@@ -288,6 +296,7 @@ export default function ClientDetailPage() {
             borderBottom: activeTab === tab.key ? '2px solid #3B82F6' : '2px solid transparent',
             marginBottom: -2, background: 'none', border: 'none', borderBottomStyle: 'solid',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 0.15s',
+            whiteSpace: 'nowrap', flexShrink: 0,
           }}>
             {tab.icon}
             {tab.label}
@@ -312,7 +321,7 @@ export default function ClientDetailPage() {
         <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 0 32px' }}>
 
           {/* 2-column info grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {clientUser && (
               <GridCell icon={<User size={16} />} iconBg="#EFF6FF" iconColor="#3B82F6" label="Nom complet">
                 {editMode ? (
@@ -425,7 +434,7 @@ export default function ClientDetailPage() {
       {/* ═══ TAB: Documents ═══ */}
       {activeTab === 'documents' && (
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111827' }}>Documents de {client.name}</h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: '#EFF6FF', color: '#3B82F6' }}>
@@ -467,7 +476,7 @@ export default function ClientDetailPage() {
             const clientCount = docs.filter(d => d.source !== 'cabinet').length;
             const cabinetCount = docs.filter(d => d.source === 'cabinet').length;
             return (
-              <div style={{ display: 'flex', gap: 0, background: '#F3F4F6', borderRadius: 10, padding: 4, width: 'fit-content', marginBottom: 20 }}>
+              <div style={{ display: 'flex', gap: 0, background: '#F3F4F6', borderRadius: 10, padding: 4, width: 'fit-content', maxWidth: '100%', overflowX: 'auto', marginBottom: 20 }}>
                 {[{ key: 'all' as const, label: 'Tous', count: docs.length }, { key: 'client' as const, label: '📤 Du client', count: clientCount }, { key: 'cabinet' as const, label: '📥 Du cabinet', count: cabinetCount }].map(tab => (
                   <button key={tab.key} onClick={() => setDocFilter(tab.key)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: docFilter === tab.key ? 600 : 400, background: docFilter === tab.key ? '#fff' : 'transparent', color: docFilter === tab.key ? '#111827' : '#6B7280', boxShadow: docFilter === tab.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 6 }}>
                     {tab.label}
@@ -490,7 +499,8 @@ export default function ClientDetailPage() {
               <p style={{ fontSize: 13, color: '#9CA3AF' }}>Ce client n'a pas encore envoyé de documents.</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ overflowX: 'auto', margin: '0 -4px' }}>
+            <div style={{ minWidth: 520, display: 'flex', flexDirection: 'column', gap: 10, padding: '0 4px' }}>
               {filteredGroups.map(({ key, label, docs: groupDocs }) => (
                 <div key={key} style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #E5E7EB', background: '#fff' }}>
                   <button onClick={() => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; })}
@@ -582,6 +592,7 @@ export default function ClientDetailPage() {
                   })}
                 </div>
               ))}
+            </div>
             </div>
           );
           })()}
