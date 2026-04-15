@@ -447,7 +447,7 @@ export default function DocumentsPage() {
                     <td style={{ padding: '10px 14px' }}>
                       {isAudio ? <span style={{ fontSize: 12, color: '#D1D5DB' }}>—</span>
                         : invS ? <button onClick={() => doc.client_id && navigate(`/clients/${doc.client_id}/invoices/${doc.invoice_id}`)} style={{ fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20, cursor: 'pointer', background: invS.bg, color: invS.color, border: `1px solid ${invS.border}` }}>{invS.label}</button>
-                        : <span style={{ fontSize: 12, color: '#D1D5DB' }}>—</span>}
+                        : <span style={{ fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20, background: '#F3F4F6', color: '#6B7280', border: '1px solid #E5E7EB' }}>Non traitée</span>}
                     </td>
                     <td style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -465,7 +465,7 @@ export default function DocumentsPage() {
                               : <Sparkles size={14} />}
                           </Btn>
                         )}
-                        {!isAudio && !doc.invoice_id && <Btn onClick={() => handleCreate(doc)} title="Créer facture" hBg="#FFF7ED" hCol="#EA580C" disabled={creatingInv === doc.id}>{creatingInv === doc.id ? <Loader2 size={14} className="animate-spin" /> : <ClipboardList size={14} />}</Btn>}
+                        {!isAudio && <Btn onClick={() => doc.invoice_id ? (doc.client_id && navigate(`/clients/${doc.client_id}/invoices/${doc.invoice_id}`)) : handleCreate(doc)} title={doc.invoice_id ? 'Voir / modifier la facture' : 'Créer facture'} hBg="#FFF7ED" hCol="#EA580C" disabled={creatingInv === doc.id}>{creatingInv === doc.id ? <Loader2 size={14} className="animate-spin" /> : <ClipboardList size={14} />}</Btn>}
                         <Btn onClick={() => handleDownload(doc.id)} title="Télécharger" hBg="#F0FDF4" hCol="#16A34A"><Download size={14} /></Btn>
                       </div>
                     </td>

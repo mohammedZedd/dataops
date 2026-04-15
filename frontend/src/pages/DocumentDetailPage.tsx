@@ -314,14 +314,6 @@ export default function DocumentDetailPage() {
 
     return (
       <>
-        <nav className="flex items-center gap-1.5 text-[12px] text-gray-400 mb-5">
-          <button onClick={() => navigate('/clients')} className="hover:text-gray-600 transition-colors">Clients</button>
-          <ChevronRight size={12} />
-          <button onClick={() => navigate(`/clients/${clientId}`)} className="hover:text-gray-600 transition-colors">{client.name}</button>
-          <ChevronRight size={12} />
-          <span className="text-gray-700 font-medium">Note vocale</span>
-        </nav>
-
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => navigate(-1)}
             className="h-8 w-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors">
@@ -389,19 +381,6 @@ export default function DocumentDetailPage() {
 
   return (
     <>
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-[12px] text-gray-400 mb-5">
-        <button onClick={() => navigate('/clients')} className="hover:text-gray-600 transition-colors">
-          Clients
-        </button>
-        <ChevronRight size={12} />
-        <button onClick={() => navigate(`/clients/${clientId}`)} className="hover:text-gray-600 transition-colors">
-          {client.name}
-        </button>
-        <ChevronRight size={12} />
-        <span className="text-gray-700 font-medium font-mono">{invoice.invoice_number || 'Facture'}</span>
-      </nav>
-
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
