@@ -40,6 +40,7 @@ class InvitationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    token: str
     email: str
     first_name: str
     last_name: str

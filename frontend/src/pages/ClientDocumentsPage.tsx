@@ -258,6 +258,8 @@ export default function ClientDocumentsPage() {
   const canPreview = (name: string) => ['pdf', 'image'].includes(fileType(name));
   const hasFileToUpload = !!selected || !!audioFile;
 
+  const sentDocs = documents.filter(d => d.source !== 'cabinet');
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -379,7 +381,7 @@ export default function ClientDocumentsPage() {
                 <FileText size={32} className="text-green-500" />
                 <p className="text-sm font-medium text-gray-800">{selected.name}</p>
                 <p className="text-xs text-gray-500">{formatSize(selected.size)}</p>
-                <button onClick={e => { e.stopPropagation(); setSelected(null); setPhotoPreview(null); }} className="text-xs text-gray-400 hover:text-gray-600 underline">Changer</button>
+                <button onClick={e => { e.stopPropagation(); setSelected(null); }} className="text-xs text-gray-400 hover:text-gray-600 underline">Changer</button>
               </>
             ) : (
               <>
@@ -484,21 +486,23 @@ export default function ClientDocumentsPage() {
       </div>
       )}
 
-      {/* ═══ Documents list ═══ */}
+      {/* ═══ Documents envoyés ═══ */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
-          <p className="text-sm font-medium text-gray-700">
-            Fichiers envoyés
-            {documents.length > 0 && <span className="ml-2 text-xs text-gray-400 font-normal">({documents.length})</span>}
-          </p>
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+          <span className="text-base">📤</span>
+          <span className="text-sm font-semibold text-gray-800">Mes documents envoyés</span>
+          {sentDocs.length > 0 && (
+            <span className="ml-1 bg-gray-100 text-gray-500 text-xs font-medium rounded-full px-2 py-0.5">{sentDocs.length}</span>
+          )}
         </div>
 
         {loadError && <div className="px-4 py-3 text-sm text-red-600">{loadError}</div>}
 
-        {documents.length === 0 && !loadError ? (
-          <div className="py-14 text-center">
+        {sentDocs.length === 0 && !loadError ? (
+          <div className="py-12 text-center">
+            <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3"><Upload size={18} className="text-gray-400" /></div>
             <p className="text-sm font-semibold text-gray-600">Aucun document envoyé</p>
-            <p className="text-sm text-gray-400 mt-1">Vos fichiers apparaîtront ici après l'envoi.</p>
+            <p className="text-sm text-gray-400 mt-1">Utilisez la zone ci-dessus pour transmettre vos fichiers.</p>
           </div>
         ) : (
           <table className="w-full">
@@ -506,19 +510,21 @@ export default function ClientDocumentsPage() {
               <tr>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Fichier</th>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Type</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Taille</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3 hidden sm:table-cell">Taille</th>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Date</th>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Statut</th>
                 <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {documents.map((doc, idx) => (
+              {sentDocs.map((doc, idx) => (
                 <>
-                  <tr key={doc.id} className={`hover:bg-gray-50 transition-colors ${idx < documents.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate">{doc.file_name}</td>
+                  <tr key={doc.id} className={`hover:bg-gray-50 transition-colors ${idx < sentDocs.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[180px]">
+                      <span className="block truncate" title={doc.file_name}>{doc.file_name}</span>
+                    </td>
                     <td className="px-4 py-3"><TypeBadge name={doc.file_name} /></td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatSize(doc.file_size)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap hidden sm:table-cell">{formatSize(doc.file_size)}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{new Date(doc.uploaded_at).toLocaleDateString('fr-FR')}</td>
                     <td className="px-4 py-3"><StatusBadge status={doc.status} /></td>
                     <td className="px-4 py-3">
@@ -528,20 +534,24 @@ export default function ClientDocumentsPage() {
                             {playingDocId === doc.id ? <Pause size={14} /> : <Play size={14} />}
                           </button>
                         ) : (
-                          <button onClick={() => loadPreview(doc)} disabled={!canPreview(doc.file_name)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title="Prévisualiser">
+                          <button onClick={() => loadPreview(doc)} disabled={!canPreview(doc.file_name)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title="Aperçu">
                             <Eye size={14} />
                           </button>
                         )}
                         <button onClick={() => handleDownload(doc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Télécharger">
                           <Download size={14} />
                         </button>
-                        <button onClick={() => { if (!isReadOnly) { closePreview(); setDeleteModal({ open: true, doc }); } }} disabled={isReadOnly} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title={isReadOnly ? 'Action non disponible' : 'Supprimer'}>
+                        <button
+                          onClick={() => { if (!isReadOnly && doc.status !== 'processed') { closePreview(); setDeleteModal({ open: true, doc }); } }}
+                          disabled={isReadOnly || doc.status === 'processed'}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={doc.status === 'processed' ? 'Document traité — suppression impossible' : isReadOnly ? 'Accès lecture seule' : 'Supprimer'}
+                        >
                           <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
                   </tr>
-                  {/* Inline audio player */}
                   {playingDocId === doc.id && playingUrl && (
                     <tr key={`${doc.id}-player`} className="border-b border-gray-100">
                       <td colSpan={6} className="px-4 py-2 bg-violet-50">
@@ -556,35 +566,6 @@ export default function ClientDocumentsPage() {
         )}
       </div>
 
-      {/* Documents reçus du cabinet */}
-      {(() => {
-        const cabinetDocs = documents.filter(d => d.source === 'cabinet');
-        if (cabinetDocs.length === 0) return null;
-        return (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-6">
-            <div className="px-4 py-3 border-b" style={{ borderColor: '#EDE9FE' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 16 }}>📥</span>
-                <span className="text-sm font-medium" style={{ color: '#7C3AED' }}>Documents reçus du cabinet</span>
-                <span style={{ background: '#EDE9FE', color: '#7C3AED', borderRadius: 20, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{cabinetDocs.length}</span>
-              </div>
-            </div>
-            {cabinetDocs.map((doc, idx) => (
-              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: idx < cabinetDocs.length - 1 ? '1px solid #F3F4F6' : 'none', background: doc.is_new ? '#FAF5FF' : '#fff', borderLeft: doc.is_new ? '3px solid #7C3AED' : '3px solid #EDE9FE' }}>
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
-                  {doc.file_name?.endsWith('.pdf') ? '📄' : doc.file_name?.match(/\.(jpg|jpeg|png)$/i) ? '🖼️' : doc.file_name?.match(/\.(xlsx|xls)$/i) ? '📊' : '📎'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</p>
-                  <p style={{ fontSize: 11, color: '#7C3AED', marginTop: 2 }}>Envoyé par votre cabinet · {new Date(doc.uploaded_at).toLocaleDateString('fr-FR')}</p>
-                  {doc.description && <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 1, fontStyle: 'italic' }}>"{doc.description}"</p>}
-                </div>
-                <button onClick={() => handleDownload(doc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Télécharger"><Download size={14} /></button>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
     </div>
   );
 }

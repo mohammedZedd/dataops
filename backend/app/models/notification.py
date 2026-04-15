@@ -22,3 +22,4 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     client_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("clients.id"), nullable=True)
     document_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("documents.id"), nullable=True)
+    task_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("client_tasks.id"), nullable=True)

@@ -1081,7 +1081,7 @@ export default function ClientsListPage() {
     );
   }
 
-  const COLS = ['NOM', 'EMAIL', 'TÉLÉPHONE', 'ENTREPRISE', 'INSCRIPTION', 'DOCUMENTS', 'STATUT', 'ACTIONS', ''];
+  const COLS = ['NOM', 'EMAIL', 'TÉLÉPHONE', 'ENTREPRISE', 'INSCRIPTION', 'DOCUMENTS', 'COMPTABLE', 'STATUT', 'ACTIONS', ''];
 
   return (
     <>
@@ -1240,13 +1240,13 @@ export default function ClientsListPage() {
                   return (
                     <tr
                       key={c.id}
-                      onClick={() => c.client_id && navigate(`/clients/${c.client_id}`)}
+                      onClick={() => navigate(`/clients/${c.client_id}`)}
                       style={{
                         borderBottom: idx < filtered.length - 1 ? '1px solid #F3F4F6' : 'none',
                         boxShadow: `inset 4px 0 0 0 ${accentColor}`,
                         transition: 'background 0.12s',
                         background: '#fff',
-                        cursor: c.client_id ? 'pointer' : 'default',
+                        cursor: 'pointer',
                       }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = '#F8FAFC'; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = '#fff'; }}
@@ -1317,6 +1317,33 @@ export default function ClientsListPage() {
                         }}>
                           {c.is_active ? 'Actif' : 'Inactif'}
                         </span>
+                      </td>
+
+                      {/* COMPTABLE ASSIGNÉ */}
+                      <td style={{ padding: '16px 12px' }} onClick={e => e.stopPropagation()}>
+                        {c.assigned_to && c.assigned_to.length > 0 ? (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {c.assigned_to.map(a => (
+                              <span
+                                key={a.id}
+                                title={a.name}
+                                style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                                  fontSize: 11, fontWeight: 600,
+                                  padding: '2px 8px', borderRadius: 20,
+                                  background: '#EFF6FF', color: '#3B82F6',
+                                  border: '1px solid #BFDBFE',
+                                  whiteSpace: 'nowrap', maxWidth: 120,
+                                  overflow: 'hidden', textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {a.name.split(' ')[0]}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#D1D5DB' }}>—</span>
+                        )}
                       </td>
 
                       {/* ACTIONS */}

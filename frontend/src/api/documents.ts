@@ -101,6 +101,10 @@ export async function markDocumentViewed(documentId: string): Promise<void> {
   await apiClient.patch(`/documents/${documentId}/viewed`);
 }
 
+export async function markAllReceivedAsViewed(): Promise<void> {
+  await apiClient.patch('/documents/received/mark-all-viewed');
+}
+
 export async function createInvoiceFromDocument(documentId: string): Promise<Invoice> {
   const { data } = await apiClient.post<Invoice>(`/documents/${documentId}/create-invoice`);
   return data;

@@ -39,6 +39,7 @@ export type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'cancelled';
 
 export interface Invitation {
   id: string;
+  token: string;
   email: string;
   first_name: string;
   last_name: string;
@@ -130,6 +131,11 @@ export type InvoiceDirection = 'achat' | 'vente';
 /**
  * User avec role CLIENT vu par le cabinet (issu du système d'invitation).
  */
+export interface AssignedAccountant {
+  id: string;
+  name: string;
+}
+
 export interface ClientUser {
   id: string;
   first_name: string;
@@ -145,6 +151,7 @@ export interface ClientUser {
   is_active: boolean;
   access_level?: AccessLevel;
   created_at: string;
+  assigned_to?: AssignedAccountant[];
 }
 
 /**

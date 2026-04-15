@@ -1,70 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Send, Mic } from 'lucide-react';
 import apiClient from '../api/axios';
-import { getPresignedDownloadUrl } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import { soundService } from '../utils/soundService';
-import { formatTimeAgo as timeAgo } from '../utils/dateUtils';
-
-interface ReplyTo { id: string; content: string; file_name?: string; sender_role: string }
-interface Msg { id: string; sender_id: string; sender_role: string; content: string; message_type?: string; file_name?: string; document_id?: string; reply_to_id?: string; reply_to?: ReplyTo | null; is_read: boolean; created_at: string }
-
-/* ── Inline AudioPlayer ── */
-function AudioPlayer({ documentId, isMe }: { documentId: string; isMe: boolean }) {
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-
-  const load = async () => {
-    if (audioUrl || loading) return;
-    setLoading(true);
-    try {
-      const url = await getPresignedDownloadUrl(documentId);
-      setAudioUrl(url);
-    } catch { setError(true); }
-    finally { setLoading(false); }
-  };
-
-  if (error) return <div style={{ fontSize: 11, color: '#EF4444' }}>Impossible de charger l'audio</div>;
-  if (!audioUrl) return (
-    <button onClick={load} disabled={loading} style={{ background: isMe ? 'rgba(255,255,255,0.2)' : '#F3F4F6', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', color: isMe ? 'white' : '#374151', fontSize: 12, width: '100%' }}>
-      {loading ? '⏳ Chargement...' : '▶ Écouter'}
-    </button>
-  );
-  return <audio controls style={{ width: '100%', height: 32 }} src={audioUrl} />;
-}
+import { MessageBubble, ChatInput } from '../components/Chat';
+import type { Msg, ReplyToState } from '../types/chat';
 
 export default function ClientMessagesPage() {
   const { user } = useAuth();
-  const [convId, setConvId] = useState<string | null>(null);
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [convId,     setConvId]     = useState<string | null>(null);
+  const [msgs,       setMsgs]       = useState<Msg[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [hasNew,     setHasNew]     = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ReplyToState | null>(null);
+
+  const endRef       = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const prevCount = useRef(0);
-  const isAtBottom = useRef(true);
-  const [hasNew, setHasNew] = useState(false);
+  const prevCount    = useRef(0);
+  const isAtBottom   = useRef(true);
 
-  // Reply state
-  const [replyingTo, setReplyingTo] = useState<{ id: string; content: string; file_name?: string; sender_role: string; isMe: boolean } | null>(null);
-  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
-
-  // Voice recording state
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Cleanup recording on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
-    };
-  }, []);
-
+  // ── Init: charge la conversation existante du client ────────────────────────
   const init = useCallback(async () => {
     setLoading(true);
     try {
@@ -73,7 +27,7 @@ export default function ClientMessagesPage() {
         const c = data.conversations[0];
         setConvId(c.id);
         const { data: m } = await apiClient.get(`/chat/conversations/${c.id}/messages`);
-        const list = m.messages ?? [];
+        const list: Msg[] = m.messages ?? [];
         setMsgs(list);
         prevCount.current = list.length;
       }
@@ -81,20 +35,20 @@ export default function ClientMessagesPage() {
     finally { setLoading(false); }
   }, []);
 
+  // ── Polling des nouveaux messages ───────────────────────────────────────────
   const fetchMsgs = useCallback(async () => {
     if (!convId) return;
     try {
       const { data } = await apiClient.get(`/chat/conversations/${convId}/messages`);
       const list: Msg[] = data.messages ?? [];
       setMsgs(prev => {
-        const prevIds = prev.map(m => m.id).join(',');
-        const newIds = list.map((m: Msg) => m.id).join(',');
-        if (prevIds === newIds) return prev;
+        if (prev.map(m => m.id).join(',') === list.map((m: Msg) => m.id).join(',')) return prev;
         if (list.length > prevCount.current && prevCount.current > 0) {
           const last = list[list.length - 1];
-          const isMine = last && last.sender_id === user?.id;
-          if (!isMine) soundService.playMessageReceived();
-          if (!isMine && !isAtBottom.current) setHasNew(true);
+          if (last?.sender_id !== user?.id) {
+            soundService.playMessageReceived();
+            if (!isAtBottom.current) setHasNew(true);
+          }
         }
         prevCount.current = list.length;
         return list;
@@ -105,12 +59,14 @@ export default function ClientMessagesPage() {
   useEffect(() => { init(); }, [init]);
   useEffect(() => { if (convId) { const t = setInterval(fetchMsgs, 4000); return () => clearInterval(t); } }, [convId, fetchMsgs]);
 
+  // Scroll auto sur nouveau message
   useEffect(() => {
     if (msgs.length === 0) return;
     const last = msgs[msgs.length - 1];
-    const isMine = last?.sender_id === user?.id;
-    if (isMine || isAtBottom.current) endRef.current?.scrollIntoView({ behavior: prevCount.current <= 1 ? 'instant' : 'smooth' });
-  }, [msgs.length]);
+    if (last?.sender_id === user?.id || isAtBottom.current) {
+      endRef.current?.scrollIntoView({ behavior: prevCount.current <= 1 ? 'instant' : 'smooth' });
+    }
+  }, [msgs.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleScroll() {
     const el = containerRef.current;
@@ -119,92 +75,45 @@ export default function ClientMessagesPage() {
     if (isAtBottom.current) setHasNew(false);
   }
 
-  async function handleSend() {
-    if (!text.trim() || sending) return;
-    const content = text.trim(); setText(''); setSending(true);
-    try {
-      let cid = convId;
-      if (!cid) { const { data } = await apiClient.post('/chat/conversations'); cid = data.id; setConvId(cid); }
-      const { data } = await apiClient.post(`/chat/conversations/${cid}/messages`, { content, message_type: 'text', reply_to_id: replyingTo?.id || null });
-      setMsgs(p => [...p, data]);
+  // ── Gestion des messages reçus depuis ChatInput ─────────────────────────────
+  function handleMessageSent(msg: Msg & { _replaceId?: string }) {
+    if (msg._replaceId) {
+      // Remplace le message optimiste (note vocale)
+      setMsgs(p => p.map(m => m.id === msg._replaceId ? msg : m));
+    } else if (msg.message_type === '_error_remove') {
+      setMsgs(p => p.filter(m => m.id !== msg.sender_id));
+    } else {
+      setMsgs(p => [...p, msg]);
       prevCount.current += 1;
-      setReplyingTo(null);
-      soundService.playMessageSent();
-    } catch { setText(content); }
-    finally { setSending(false); }
+    }
   }
 
-  // ── Voice recording ──
-  const startRecording = async (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
+  // Crée la conversation si elle n'existe pas encore
+  async function getOrCreateConvId(): Promise<string> {
+    if (convId) return convId;
+    const { data } = await apiClient.post('/chat/conversations');
+    setConvId(data.id);
+    return data.id;
+  }
 
-      mediaRecorder.ondataavailable = (ev) => { chunks.push(ev.data); };
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        stream.getTracks().forEach(t => t.stop());
-        await sendVoiceNote(blob);
-      };
+  const suggestions = [
+    "J'ai une question sur ma facture",
+    "Pouvez-vous vérifier ce document ?",
+    "J'attends un retour sur mon dossier",
+  ];
 
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordingTime(0);
-      timerRef.current = setInterval(() => {
-        setRecordingTime(prev => {
-          if (prev >= 120) { stopRecording(); return prev; }
-          return prev + 1;
-        });
-      }, 1000);
-    } catch { alert('Microphone non disponible'); }
-  };
-
-  const stopRecording = (e?: React.MouseEvent | React.TouchEvent) => {
-    e?.preventDefault();
-    if (!isRecording) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-    setIsRecording(false);
-    setRecordingTime(0);
-    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
-  };
-
-  const sendVoiceNote = async (blob: Blob) => {
-    const filename = `note_vocale_${Date.now()}.webm`;
-    const file = new File([blob], filename, { type: 'audio/webm' });
-    const tempId = 'temp-' + Date.now();
-    setMsgs(prev => [...prev, { id: tempId, content: '🎤 Note vocale', message_type: 'audio', file_name: filename, sender_id: user?.id ?? '', sender_role: 'client', is_read: false, created_at: new Date().toISOString() }]);
-
-    try {
-      let cid = convId;
-      if (!cid) { const { data } = await apiClient.post('/chat/conversations'); cid = data.id; setConvId(cid); }
-
-      const form = new FormData();
-      form.append('file', file);
-      const { data: uploadData } = await apiClient.post('/documents/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-
-      const { data: msg } = await apiClient.post(`/chat/conversations/${cid}/messages`, { content: '🎤 Note vocale', message_type: 'audio', file_name: filename, document_id: uploadData.id, reply_to_id: replyingTo?.id || null });
-      setMsgs(prev => prev.map(m => m.id === tempId ? msg : m));
-      prevCount.current += 1;
-      setReplyingTo(null);
-      soundService.playMessageSent();
-    } catch (err) {
-      console.error('Voice note error:', err);
-      setMsgs(prev => prev.filter(m => m.id !== tempId));
-      alert('Erreur envoi note vocale');
-    }
-  };
-
-  const suggestions = ["J'ai une question sur ma facture", "Pouvez-vous vérifier ce document ?", "J'attends un retour sur mon dossier"];
+  // Avatar cabinet (même style que les avatars clients dans ChatPage)
+  const cabinetAvatar = (
+    <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(#3B82F6,#1D4ED8)', color: '#fff', fontSize: 11, fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>C</div>
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
-      <style>{`@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(1.1)}}`}</style>
+    <>
+    <style>{`.client-msg-root{display:flex;flex-direction:column;height:calc(100vh - 56px);margin:-16px -24px;background:#fff;overflow:hidden}@media(max-width:768px){.client-msg-root{margin:-16px -16px}}`}</style>
+    <div className="client-msg-root">
 
       {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '16px 0', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
         <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg,#2563EB,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🏢</div>
         <div>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111827' }}>Votre cabinet comptable</h2>
@@ -215,27 +124,46 @@ export default function ClientMessagesPage() {
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Zone messages */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {hasNew && (
-          <div onClick={() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); setHasNew(false); }}
-            style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#2563EB,#7C3AED)', color: '#fff', borderRadius: 20, padding: '8px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 12px rgba(37,99,235,0.3)', zIndex: 10, whiteSpace: 'nowrap' }}>
+          <div
+            onClick={() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); setHasNew(false); }}
+            style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#2563EB,#7C3AED)', color: '#fff', borderRadius: 20, padding: '8px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 12px rgba(37,99,235,0.3)', zIndex: 10, whiteSpace: 'nowrap' }}
+          >
             ↓ Nouveau message
           </div>
         )}
-        <div ref={containerRef} onScroll={handleScroll} style={{ height: '100%', overflowY: 'auto', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 720, width: '100%', margin: '0 auto' }}>
+
+        <div
+          ref={containerRef}
+          onScroll={handleScroll}
+          style={{ height: '100%', overflowY: 'auto', padding: '20px 24px', background: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: 10 }}
+        >
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF' }}>Chargement…</div>
           ) : msgs.length === 0 ? (
+            /* État vide avec suggestions */
             <div style={{ textAlign: 'center', padding: '40px 20px', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ fontSize: 56, marginBottom: 16 }}>👋</div>
               <h3 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: '#111827' }}>Bonjour {user?.first_name} !</h3>
-              <p style={{ margin: '0 0 24px', color: '#6B7280', fontSize: 15, maxWidth: 360, lineHeight: 1.6 }}>Envoyez un message à votre cabinet comptable.</p>
+              <p style={{ margin: '0 0 24px', color: '#6B7280', fontSize: 15, maxWidth: 360, lineHeight: 1.6 }}>
+                Envoyez un message à votre cabinet comptable.
+              </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 480 }}>
                 {suggestions.map((s, i) => (
-                  <button key={i} onClick={() => setText(s)} style={{ padding: '8px 16px', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 20, cursor: 'pointer', fontSize: 13, color: '#374151', transition: 'all 0.15s' }}
+                  <button
+                    key={i}
+                    onClick={() => {
+                      // Hack: on ne peut pas accéder au state interne de ChatInput,
+                      // donc on simule un clic — à remplacer par un prop onSuggest si besoin
+                      const textarea = document.querySelector<HTMLTextAreaElement>('.client-chat-textarea');
+                      if (textarea) { const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!; nativeInput.call(textarea, s); textarea.dispatchEvent(new Event('input', { bubbles: true })); }
+                    }}
+                    style={{ padding: '8px 16px', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 20, cursor: 'pointer', fontSize: 13, color: '#374151', transition: 'all 0.15s' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#EFF6FF'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#BFDBFE'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#E5E7EB'; }}>
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#E5E7EB'; }}
+                  >
                     {s}
                   </button>
                 ))}
@@ -247,71 +175,15 @@ export default function ClientMessagesPage() {
               {msgs.map(m => {
                 const isMe = m.sender_id === user?.id;
                 return (
-                  <div key={m.id}
-                    onMouseEnter={() => setHoveredMsgId(m.id)}
-                    onMouseLeave={() => setHoveredMsgId(null)}
-                    style={{ position: 'relative', display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8 }}>
-                    {!isMe && <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#2563EB,#7C3AED)', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>C</div>}
-                    <div style={{ maxWidth: '68%' }}>
-                      {!isMe && <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 4, marginLeft: 4 }}>Votre cabinet</div>}
-
-                      {/* Audio message */}
-                      {m.message_type === 'audio' && m.document_id ? (
-                        <div style={{ background: isMe ? 'linear-gradient(135deg,#2563EB,#7C3AED)' : '#fff', color: isMe ? '#fff' : '#111827', borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px', padding: '12px 16px', boxShadow: isMe ? '0 4px 12px rgba(37,99,235,0.3)' : '0 2px 8px rgba(0,0,0,0.06)', border: isMe ? 'none' : '1px solid #E5E7EB', maxWidth: 280 }}>
-                          {/* Reply preview inside bubble */}
-                          {m.reply_to && (
-                            <div style={{ background: 'rgba(0,0,0,0.06)', borderLeft: `3px solid ${isMe ? 'rgba(255,255,255,0.5)' : '#3B82F6'}`, borderRadius: '0 6px 6px 0', padding: '6px 10px', marginBottom: 8, fontSize: 12, opacity: 0.85 }}>
-                              <div style={{ fontWeight: 600, color: isMe ? 'rgba(255,255,255,0.8)' : '#3B82F6', marginBottom: 2, fontSize: 11 }}>{m.reply_to.sender_role === 'client' ? 'Vous' : 'Votre cabinet'}</div>
-                              <div style={{ color: isMe ? 'rgba(255,255,255,0.7)' : '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{m.reply_to.file_name ? `📎 ${m.reply_to.file_name}` : m.reply_to.content}</div>
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                            <span style={{ fontSize: 18 }}>🎤</span>
-                            <span style={{ fontSize: 12, fontWeight: 500 }}>Note vocale</span>
-                          </div>
-                          <AudioPlayer documentId={m.document_id} isMe={isMe} />
-                          <div style={{ fontSize: 10, marginTop: 6, opacity: 0.7, textAlign: 'right' }}>{timeAgo(m.created_at)}{isMe && <span style={{ marginLeft: 4 }}>{m.is_read ? '✓✓' : '✓'}</span>}</div>
-                        </div>
-                      ) : (
-                        /* Regular / file message */
-                        <div style={{ background: isMe ? 'linear-gradient(135deg,#2563EB,#7C3AED)' : '#fff', color: isMe ? '#fff' : '#111827', borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px', padding: '12px 16px', boxShadow: isMe ? '0 4px 12px rgba(37,99,235,0.3)' : '0 2px 8px rgba(0,0,0,0.06)', border: isMe ? 'none' : '1px solid #E5E7EB' }}>
-                          {/* Reply preview inside bubble */}
-                          {m.reply_to && (
-                            <div style={{ background: 'rgba(0,0,0,0.06)', borderLeft: `3px solid ${isMe ? 'rgba(255,255,255,0.5)' : '#3B82F6'}`, borderRadius: '0 6px 6px 0', padding: '6px 10px', marginBottom: 8, fontSize: 12, opacity: 0.85 }}>
-                              <div style={{ fontWeight: 600, color: isMe ? 'rgba(255,255,255,0.8)' : '#3B82F6', marginBottom: 2, fontSize: 11 }}>{m.reply_to.sender_role === 'client' ? 'Vous' : 'Votre cabinet'}</div>
-                              <div style={{ color: isMe ? 'rgba(255,255,255,0.7)' : '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{m.reply_to.file_name ? `📎 ${m.reply_to.file_name}` : m.reply_to.content}</div>
-                            </div>
-                          )}
-                          {m.message_type === 'file' && m.document_id ? (
-                            <div onClick={async () => {
-                              try { const url = await getPresignedDownloadUrl(m.document_id!); if (url) window.open(url, '_blank'); } catch (err) { console.error('Download failed:', err); alert('Impossible de télécharger le fichier.'); }
-                            }}
-                              style={{ background: isMe ? 'rgba(255,255,255,0.15)' : '#F8FAFC', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: m.content && m.content !== `📎 ${m.file_name}` ? 6 : 0, border: isMe ? '1px solid rgba(255,255,255,0.2)' : '1px solid #E5E7EB' }}>
-                              <span style={{ fontSize: 22, flexShrink: 0 }}>{m.file_name?.endsWith('.pdf') ? '📄' : m.file_name?.match(/\.(jpg|jpeg|png)$/i) ? '🖼️' : m.file_name?.match(/\.(xlsx|xls)$/i) ? '📊' : '📎'}</span>
-                              <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.file_name || 'Document'}</div><div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>Appuyez pour télécharger ↓</div></div>
-                            </div>
-                          ) : null}
-                          {(m.message_type !== 'file' || (m.content && m.content !== `📎 ${m.file_name}`)) && <div style={{ fontSize: 14, lineHeight: 1.6 }}>{m.content}</div>}
-                          <div style={{ fontSize: 10, marginTop: 6, opacity: 0.7, textAlign: 'right' }}>{timeAgo(m.created_at)}{isMe && <span style={{ marginLeft: 4 }}>{m.is_read ? '✓✓' : '✓'}</span>}</div>
-                        </div>
-                      )}
-                    </div>
-                    {isMe && <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{(user?.first_name ?? '').slice(0, 2).toUpperCase()}</div>}
-
-                    {/* Hover action buttons */}
-                    {hoveredMsgId === m.id && (
-                      <div style={{ position: 'absolute', top: -32, right: isMe ? 0 : 'auto', left: isMe ? 'auto' : 0, display: 'flex', gap: 4, background: 'white', border: '1px solid #E5E7EB', borderRadius: 20, padding: '4px 8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', zIndex: 10, whiteSpace: 'nowrap' }}>
-                        <button
-                          onClick={() => setReplyingTo({ id: m.id, content: m.content, file_name: m.file_name, sender_role: m.sender_role, isMe })}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 12, fontSize: 13, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 4, transition: 'background 0.15s' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#F3F4F6')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                          title="Répondre">
-                          ↩ Répondre
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <MessageBubble
+                    key={m.id}
+                    msg={m}
+                    isMe={isMe}
+                    otherLabel="Cabinet"
+                    variant="flat"
+                    onReply={setReplyingTo}
+                    otherAvatar={cabinetAvatar}
+                  />
                 );
               })}
               <div ref={endRef} />
@@ -320,54 +192,17 @@ export default function ClientMessagesPage() {
         </div>
       </div>
 
-      {/* Recording indicator */}
-      {isRecording && (
-        <div style={{ padding: '8px 16px', background: '#FEF2F2', borderTop: '1px solid #FECACA', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexShrink: 0 }}>
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#EF4444', animation: 'pulse 1s ease-in-out infinite', flexShrink: 0 }} />
-          <span style={{ color: '#DC2626', fontWeight: 500 }}>Enregistrement en cours...</span>
-          <span style={{ color: '#EF4444', fontWeight: 700, fontFamily: 'monospace' }}>
-            {Math.floor(recordingTime / 60).toString().padStart(2, '0')}:{(recordingTime % 60).toString().padStart(2, '0')}
-          </span>
-          <span style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 'auto' }}>Relâchez 🎤 pour envoyer</span>
-        </div>
-      )}
-
-      {/* Reply preview bar */}
-      {replyingTo && (
-        <div style={{ padding: '8px 16px', background: '#EFF6FF', borderTop: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <div style={{ width: 3, height: '100%', minHeight: 30, background: '#3B82F6', borderRadius: 2, flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#3B82F6', marginBottom: 2 }}>
-              ↩ Répondre à {replyingTo.isMe ? 'vous-même' : 'votre cabinet'}
-            </div>
-            <div style={{ fontSize: 12, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {replyingTo.file_name ? `📎 ${replyingTo.file_name}` : replyingTo.content}
-            </div>
-          </div>
-          <button onClick={() => setReplyingTo(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 18, padding: 4, flexShrink: 0 }}>✕</button>
-        </div>
-      )}
-
       {/* Input */}
-      <div style={{ background: '#fff', borderTop: '1px solid #E5E7EB', padding: '16px 0', flexShrink: 0 }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-          {/* Mic button */}
-          <button
-            onMouseDown={startRecording} onMouseUp={stopRecording}
-            onTouchStart={startRecording} onTouchEnd={stopRecording}
-            style={{ width: 48, height: 48, borderRadius: '50%', background: isRecording ? '#EF4444' : 'transparent', border: isRecording ? 'none' : '1.5px solid #E5E7EB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: isRecording ? 'white' : '#9CA3AF', transition: 'all 0.15s', animation: isRecording ? 'pulse 1s ease-in-out infinite' : 'none' }}
-            title={isRecording ? 'Relâcher pour envoyer' : 'Maintenir pour enregistrer'}>
-            <Mic size={18} />
-          </button>
-          <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            placeholder="Écrivez votre message…" rows={1}
-            style={{ flex: 1, border: '1.5px solid #E5E7EB', borderRadius: 16, padding: '12px 16px', fontSize: 14, resize: 'none', outline: 'none', maxHeight: 120, fontFamily: 'inherit', lineHeight: 1.5 }} />
-          <button onClick={handleSend} disabled={!text.trim() || sending} style={{ width: 48, height: 48, borderRadius: '50%', background: text.trim() ? 'linear-gradient(135deg,#2563EB,#7C3AED)' : '#E5E7EB', border: 'none', cursor: text.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Send size={18} color="#fff" />
-          </button>
-        </div>
-        <p style={{ maxWidth: 720, margin: '8px auto 0', fontSize: 11, color: '#9CA3AF', textAlign: 'center' }}>Shift + Entrée pour aller à la ligne</p>
-      </div>
+      <ChatInput
+        convId={convId}
+        getOrCreateConvId={getOrCreateConvId}
+        replyingTo={replyingTo}
+        onClearReply={() => setReplyingTo(null)}
+        onMessageSent={handleMessageSent}
+        onConvCreated={setConvId}
+        placeholder="Écrivez votre message…"
+      />
     </div>
+    </>
   );
 }

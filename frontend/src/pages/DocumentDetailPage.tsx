@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ChevronRight, ArrowLeft, FileText, Loader2, Download, Mic } from 'lucide-react';
+import { ChevronRight, ArrowLeft, FileText, Loader2, Download, Mic, Maximize2, X } from 'lucide-react';
 import { getInvoice, getClient, updateInvoice, validateInvoice } from '../api';
 import { getPresignedPreviewUrl, getPresignedDownloadUrl, extractDocumentData } from '../api/documents';
 import type { ExtractionResult } from '../api/documents';
@@ -13,10 +13,11 @@ import type { Client, Invoice } from '../types';
 
 // ─── Document preview ─────────────────────────────────────────────────────────
 
-function DocumentPreview({ documentId }: { documentId: string }) {
+function DocumentPreview({ documentId, fileName }: { documentId: string; fileName?: string }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -34,41 +35,121 @@ function DocumentPreview({ documentId }: { documentId: string }) {
     } catch { /* ignore */ }
   }
 
+  const displayName = fileName || 'Document';
+
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-        <Loader2 size={24} className="text-blue-500 animate-spin mb-3" />
-        <p className="text-[13px] text-gray-500">Chargement de l'aperçu…</p>
+      <div className="flex flex-col h-full rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 flex-shrink-0">
+          <span className="text-[13px] text-gray-400">Chargement…</span>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center bg-gray-50">
+          <Loader2 size={24} className="text-blue-500 animate-spin mb-3" />
+          <p className="text-[13px] text-gray-500">Chargement de l'aperçu…</p>
+        </div>
       </div>
     );
   }
 
   if (error || !previewUrl) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-        <div className="h-16 w-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center mb-4">
-          <FileText size={28} className="text-gray-300" />
+      <div className="flex flex-col h-full rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 flex-shrink-0">
+          <span className="text-[13px] text-gray-300 font-medium truncate">{displayName}</span>
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-gray-300 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+          >
+            <Download size={13} /> <span className="hidden sm:inline">Télécharger</span>
+          </button>
         </div>
-        <p className="text-[13px] font-medium text-gray-500">Aperçu non disponible</p>
-        <button
-          onClick={handleDownload}
-          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium
-            text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-        >
-          <Download size={13} />
-          Télécharger le document
-        </button>
+        <div className="flex-1 flex flex-col items-center justify-center bg-gray-50">
+          <div className="h-16 w-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center mb-4">
+            <FileText size={28} className="text-gray-300" />
+          </div>
+          <p className="text-[13px] font-medium text-gray-500">Aperçu non disponible</p>
+          <button
+            onClick={handleDownload}
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium
+              text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+          >
+            <Download size={13} /> Télécharger le document
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <iframe
-      src={previewUrl}
-      className="w-full h-full rounded-lg border border-gray-200"
-      title="Aperçu du document"
-      style={{ border: 'none', borderRadius: 8 }}
-    />
+    <>
+      {/* Viewer with toolbar */}
+      <div className="flex flex-col h-full rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+        {/* Dark toolbar */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 flex-shrink-0">
+          <span className="text-[13px] text-gray-300 font-medium truncate max-w-[50%]">
+            {displayName}
+          </span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-gray-300 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+              title="Télécharger"
+            >
+              <Download size={13} />
+              <span className="hidden sm:inline">Télécharger</span>
+            </button>
+            <button
+              onClick={() => setFullscreen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-gray-300 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+              title="Plein écran"
+            >
+              <Maximize2 size={13} />
+              <span className="hidden sm:inline">Plein écran</span>
+            </button>
+          </div>
+        </div>
+        {/* iframe */}
+        <div className="flex-1 bg-gray-100 overflow-hidden">
+          <iframe
+            src={previewUrl}
+            className="w-full h-full"
+            title="Aperçu du document"
+            style={{ border: 'none' }}
+          />
+        </div>
+      </div>
+
+      {/* Fullscreen modal */}
+      {fullscreen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black">
+          <div className="flex items-center justify-between px-6 py-4 bg-gray-900 flex-shrink-0">
+            <span className="text-white text-[15px] font-medium truncate max-w-[60%]">{displayName}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDownload}
+                className="flex items-center gap-2 px-4 py-2 text-[13px] text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <Download size={14} /> Télécharger
+              </button>
+              <button
+                onClick={() => setFullscreen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-[13px] text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <X size={14} /> Fermer
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 bg-gray-100">
+            <iframe
+              src={previewUrl}
+              className="w-full h-full"
+              title="Document plein écran"
+              style={{ border: 'none' }}
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -343,26 +424,24 @@ export default function DocumentDetailPage() {
 
       {saveError && <ErrorBanner message={saveError} />}
 
-      {/* 2-column layout: preview + form */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* 2-column layout: preview (2/3) + form (1/3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
 
-        {/* Left — aperçu */}
+        {/* Left — aperçu (2/3) */}
         <div
-          className="bg-white rounded-xl border border-gray-100 p-4"
-          style={{ minHeight: '520px', boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06)' }}
+          className="lg:col-span-2"
+          style={{ height: 'calc(100vh - 260px)', minHeight: 560 }}
         >
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
-            Aperçu du document
-          </p>
-          <div style={{ height: '460px' }}>
-            <DocumentPreview documentId={invoice.document_id} />
-          </div>
+          <DocumentPreview
+            documentId={invoice.document_id}
+            fileName={invoice.invoice_number || invoice.supplier_name || undefined}
+          />
         </div>
 
-        {/* Right — formulaire */}
+        {/* Right — formulaire (1/3) */}
         <div
-          className="bg-white rounded-xl border border-gray-100 p-5"
-          style={{ boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06)' }}
+          className="bg-white rounded-xl border border-gray-100 p-5 lg:sticky lg:top-6 overflow-y-auto"
+          style={{ maxHeight: 'calc(100vh - 260px)', boxShadow: '0 1px 3px 0 rgba(0,0,0,0.06)' }}
         >
           <InvoiceForm
             invoice={invoice}

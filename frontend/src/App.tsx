@@ -16,10 +16,12 @@ import ClientMessagesPage from './pages/ClientMessagesPage';
 import InvitationsPage from './pages/InvitationsPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ClientDocumentsPage from './pages/ClientDocumentsPage';
+import ClientReceivedDocumentsPage from './pages/ClientReceivedDocumentsPage';
 import ProfilePage from './pages/ProfilePage';
 import TasksPage from './pages/TasksPage';
 import NotesPage from './pages/NotesPage';
-import TeamPage from './pages/TeamPage';
+import TeamMemberPage from './pages/TeamMemberPage';
+import EquipePage from './pages/EquipePage';
 
 export default function App() {
   return (
@@ -44,9 +46,12 @@ export default function App() {
               <Route path="chat" element={<ChatPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="accounting-entry" element={<AccountingEntryPage />} />
-              <Route path="team" element={<TeamPage />} />
+              <Route path="team/:memberId" element={<TeamMemberPage />} />
+              <Route path="equipe" element={<EquipePage />} />
+              <Route path="equipe/:memberId" element={<TeamMemberPage />} />
               <Route path="invitations" element={<InvitationsPage />} />
               <Route path="client/documents" element={<ClientDocumentsPage />} />
+              <Route path="client/documents/received" element={<ClientReceivedDocumentsPage />} />
               <Route path="client/messages" element={<ClientMessagesPage />} />
               <Route path="client/profile" element={<ProfilePage />} />
               <Route path="profile" element={<ProfilePage />} />

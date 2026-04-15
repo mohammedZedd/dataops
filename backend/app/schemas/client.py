@@ -1,7 +1,12 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import BaseModel, ConfigDict
+
+
+class AssignedAccountant(BaseModel):
+    id: str
+    name: str
 
 
 class ClientCreate(BaseModel):
@@ -42,3 +47,4 @@ class ClientUserRead(BaseModel):
     is_active: bool
     access_level: str = "full"
     created_at: datetime
+    assigned_to: List[AssignedAccountant] = []

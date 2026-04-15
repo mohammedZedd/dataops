@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Search, User, Settings, LogOut, X } from 'lucide-react';
+import { Bell, Search, User, Settings, LogOut, X, Menu } from 'lucide-react';
 import apiClient from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
+import { useSidebar } from '../../context/SidebarContext';
 import { soundService } from '../../utils/soundService';
 import type { User as UserType } from '../../types';
 
@@ -25,7 +26,7 @@ function usePageMeta(): PageMeta {
   if (/^\/clients\/[^/]+/.test(pathname))
     return { title: 'Client', subtitle: 'Documents et factures' };
   if (pathname === '/documents')
-    return { title: 'Documents' };
+    return { title: '' };
   if (pathname === '/accounting-entry')
     return { title: 'Création comptable', subtitle: 'Préparation des écritures comptables' };
   if (pathname === '/invitations')
@@ -34,6 +35,12 @@ function usePageMeta(): PageMeta {
     return { title: 'Paramètres' };
   if (pathname === '/help')
     return { title: 'Aide' };
+  if (pathname === '/client/messages')
+    return { title: '' };
+  if (pathname === '/client/documents')
+    return { title: 'Mes documents' };
+  if (pathname === '/client/documents/received')
+    return { title: 'Documents reçus' };
 
   return { title: 'ComptaFlow' };
 }
@@ -62,6 +69,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function TopNavbar() {
   const { title, subtitle } = usePageMeta();
   const { user, logout }    = useAuth();
+  const { toggle }          = useSidebar();
   const navigate            = useNavigate();
 
   const [open, setOpen] = useState(false);
@@ -130,11 +138,22 @@ export function TopNavbar() {
     >
       <div className="flex items-center justify-between h-14">
 
-        {/* Titre de page */}
-        <div>
-          <h2 className="text-[15px] font-bold text-gray-900 leading-none">{title}</h2>
-          {subtitle && (
-            <p className="text-[11px] text-gray-400 mt-0.5">{subtitle}</p>
+        {/* Hamburger (mobile/tablet) + Titre de page */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggle}
+            className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+            aria-label="Ouvrir le menu"
+          >
+            <Menu size={20} />
+          </button>
+          {title && (
+            <div>
+              <h2 className="text-[15px] font-bold text-gray-900 leading-none">{title}</h2>
+              {subtitle && (
+                <p className="text-[11px] text-gray-400 mt-0.5 hidden sm:block">{subtitle}</p>
+              )}
+            </div>
           )}
         </div>
 
@@ -184,8 +203,8 @@ export function TopNavbar() {
                       style={{ padding: '12px 18px', borderBottom: '1px solid #F9FAFB', cursor: n.link ? 'pointer' : 'default', background: n.is_read ? '#fff' : '#F0F9FF', display: 'flex', gap: 10, alignItems: 'flex-start', transition: 'background 0.15s' }}
                       onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F8FAFC'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = n.is_read ? '#fff' : '#F0F9FF'; }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, background: n.type === 'document_uploaded' ? '#EFF6FF' : n.type === 'invoice_validated' ? '#F0FDF4' : n.type === 'client_joined' ? '#F5F3FF' : '#F9FAFB' }}>
-                        {n.type === 'document_uploaded' ? '📄' : n.type === 'invoice_validated' ? '✅' : n.type === 'invoice_rejected' ? '❌' : n.type === 'client_joined' ? '👤' : '🔔'}
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, background: n.type === 'document_uploaded' ? '#EFF6FF' : n.type === 'invoice_validated' ? '#F0FDF4' : n.type === 'client_joined' ? '#F5F3FF' : n.type === 'task_comment' ? '#FEF3C7' : n.type === 'task_assigned' ? '#ECFDF5' : '#F9FAFB' }}>
+                        {n.type === 'document_uploaded' ? '📄' : n.type === 'invoice_validated' ? '✅' : n.type === 'invoice_rejected' ? '❌' : n.type === 'client_joined' ? '👤' : n.type === 'task_comment' ? '💬' : n.type === 'task_assigned' ? '📋' : '🔔'}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 1 }}>{n.title}</p>

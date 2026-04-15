@@ -420,7 +420,7 @@ export default function DocumentsPage() {
 
 function Kpi({ icon, bg, val, col, label, sub, subCol, onClick, active, accentCol }: { icon: string; bg: string; val: number; col: string; label: string; sub?: string; subCol?: string; onClick?: () => void; active?: boolean; accentCol?: string }) {
   return (
-    <div onClick={onClick} style={{ background: '#fff', border: active ? `2px solid ${accentCol ?? col}` : '1px solid #E5E7EB', borderRadius: 12, padding: '20px 24px', boxShadow: active ? `0 4px 16px ${accentCol ?? col}25` : '0 1px 3px rgba(0,0,0,0.05)', cursor: onClick ? 'pointer' : 'default', transition: 'all 0.2s', position: 'relative' }}
+    <div onClick={onClick} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '20px 24px', boxShadow: active ? `0 0 0 1px ${accentCol ?? col}, 0 4px 16px ${accentCol ?? col}25` : '0 1px 3px rgba(0,0,0,0.05)', cursor: onClick ? 'pointer' : 'default', transition: 'all 0.2s', position: 'relative' }}
       onMouseEnter={e => { if (onClick) { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-3px)'; } }}
       onMouseLeave={e => { if (onClick) { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; } }}>
       {active && <div style={{ position: 'absolute', top: 10, right: 10, width: 8, height: 8, borderRadius: '50%', background: accentCol ?? col }} />}

@@ -32,6 +32,7 @@ def _invitation_to_read(db: Session, invitation):
             client_name = client.name
     data = {
         "id": invitation.id,
+        "token": invitation.token,
         "email": invitation.email,
         "first_name": invitation.first_name,
         "last_name": invitation.last_name,

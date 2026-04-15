@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Mail, Users, UserPlus, Filter, CheckCircle, RefreshCw, Trash2, Pencil, X } from 'lucide-react';
+import { Mail, Users, UserPlus, Filter, CheckCircle, RefreshCw, Trash2, Pencil, X, Copy, CheckCircle2 } from 'lucide-react';
 import { getInvitations, resendInvitation, revokeInvitation, updateInvitation, type InvitationUpdatePayload } from '../api/invitations';
 import { getClients } from '../api/clients';
 import { useAuth } from '../context/AuthContext';
@@ -91,6 +91,7 @@ export default function InvitationsPage() {
   const [showClientModal,     setShowClientModal]     = useState(false);
   const [confirmDeleteId,     setConfirmDeleteId]     = useState<string | null>(null);
   const [editingInvitation,   setEditingInvitation]   = useState<Invitation | null>(null);
+  const [copiedId,            setCopiedId]            = useState<string | null>(null);
 
   // Inline filters
   const [activeCol,  setActiveCol]  = useState<FilterCol>(null);
@@ -152,6 +153,14 @@ export default function InvitationsPage() {
     } finally {
       setActioningId(null);
     }
+  }
+
+  function handleCopyLink(inv: Invitation) {
+    const link = `${window.location.origin}/accept-invitation?token=${inv.token}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setCopiedId(inv.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
   }
 
   async function handleUpdate(id: string, payload: InvitationUpdatePayload, resend: boolean) {
@@ -370,14 +379,22 @@ export default function InvitationsPage() {
             <p className="text-sm text-gray-400 mt-1">Essayez de modifier ou réinitialiser les filtres.</p>
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '24%' }} />{/* EMAIL */}
+              <col style={{ width: '18%' }} />{/* NOM */}
+              <col style={{ width: '10%' }} />{/* RÔLE */}
+              <col style={{ width: '16%' }} />{/* CLIENT LIÉ */}
+              <col style={{ width: '10%' }} />{/* STATUT */}
+              <col style={{ width: '11%' }} />{/* EXPIRATION */}
+              <col style={{ width: '11%' }} />{/* ACTIONS */}
+            </colgroup>
             <thead>
               <tr style={{ background: '#1E2A4A' }}>
                 {['EMAIL', 'NOM', 'RÔLE', 'CLIENT LIÉ', 'STATUT', 'EXPIRATION', 'ACTIONS'].map(h => (
-                  <th key={h} style={{ padding: '12px 16px', color: '#fff', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '12px 12px', color: '#fff', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>{h}</th>
                 ))}
               </tr>
-
             </thead>
             <tbody>
               {filtered.map((inv) => {
@@ -392,49 +409,60 @@ export default function InvitationsPage() {
                   <tr key={inv.id} style={{ borderBottom: '1px solid #F3F4F6', boxShadow: `inset 4px 0 0 0 ${accentColor}`, transition: 'background 0.1s' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#F8FAFC'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = '#fff'; }}>
-                    <td style={{ padding: '14px 16px', fontSize: 14, fontWeight: 600, color: '#111827' }} title={inv.email}>{inv.email}</td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
-                        <span style={{ fontSize: 14, color: '#374151' }}>{inv.first_name} {inv.last_name}</span>
+                    {/* EMAIL — tronqué */}
+                    <td style={{ padding: '12px 12px', maxWidth: 0 }} title={inv.email}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.email}</p>
+                    </td>
+                    {/* NOM — avatar + texte tronqué */}
+                    <td style={{ padding: '12px 12px', maxWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden' }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
+                        <span style={{ fontSize: 13, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.first_name} {inv.last_name}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '14px 16px' }}><RoleBadge role={inv.role} /></td>
-                    <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>
-                      {inv.client_name ? <span style={{ background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: 6, padding: '2px 8px', fontSize: 12, whiteSpace: 'nowrap', display: 'inline-block' }}>{inv.client_name}</span> : <span style={{ color: '#D1D5DB' }}>—</span>}
+                    {/* RÔLE */}
+                    <td style={{ padding: '12px 12px' }}><RoleBadge role={inv.role} /></td>
+                    {/* CLIENT LIÉ — tronqué */}
+                    <td style={{ padding: '12px 12px', maxWidth: 0 }}>
+                      {inv.client_name
+                        ? <span title={inv.client_name} style={{ background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: 6, padding: '2px 8px', fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.client_name}</span>
+                        : <span style={{ color: '#D1D5DB' }}>—</span>}
                     </td>
-                    <td style={{ padding: '14px 16px' }}><StatusBadge inv={inv} /></td>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: expSoon ? '#EF4444' : '#6B7280', whiteSpace: 'nowrap' }}>
+                    {/* STATUT */}
+                    <td style={{ padding: '12px 12px' }}><StatusBadge inv={inv} /></td>
+                    {/* EXPIRATION */}
+                    <td style={{ padding: '12px 12px', fontSize: 12, color: expSoon ? '#EF4444' : '#6B7280', whiteSpace: 'nowrap' }}>
                       {new Date(inv.expires_at).toLocaleDateString('fr-FR')}
-                      {expSoon && <span style={{ marginLeft: 4, fontSize: 10 }}>Bientôt</span>}
+                      {expSoon && <span style={{ marginLeft: 4, fontSize: 10 }}>⚠</span>}
                     </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                    {/* ACTIONS */}
+                    <td style={{ padding: '12px 12px' }}>
+                      <div style={{ display: 'flex', gap: 4 }}>
                         {effective !== 'accepted' && (
                           <button onClick={() => setEditingInvitation(inv)} disabled={loading} title="Modifier"
-                            style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
+                            style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
                             onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#EFF6FF'; b.style.borderColor = '#BFDBFE'; }}
                             onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.borderColor = '#E5E7EB'; }}>
-                            <Pencil size={14} color="#6B7280" />
+                            <Pencil size={13} color="#6B7280" />
                           </button>
                         )}
                         {canResend && (
                           <button onClick={() => handleResend(inv.id)} disabled={loading} title="Renvoyer"
-                            style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
+                            style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
                             onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#EFF6FF'; b.style.borderColor = '#BFDBFE'; }}
                             onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.borderColor = '#E5E7EB'; }}>
-                            <RefreshCw size={14} color="#3B82F6" />
+                            <RefreshCw size={13} color="#3B82F6" />
                           </button>
                         )}
                         {inv.status === 'pending' && (
                           <button onClick={() => setConfirmDeleteId(inv.id)} disabled={loading} title="Supprimer"
-                            style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
+                            style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: loading ? 0.5 : 1 }}
                             onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#FEF2F2'; b.style.borderColor = '#FECACA'; }}
                             onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#fff'; b.style.borderColor = '#E5E7EB'; }}>
-                            <Trash2 size={14} color="#EF4444" />
+                            <Trash2 size={13} color="#EF4444" />
                           </button>
                         )}
-                        {effective === 'accepted' && <span style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic', lineHeight: '32px' }}>—</span>}
+                        {effective === 'accepted' && <span style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic', lineHeight: '28px' }}>—</span>}
                       </div>
                     </td>
                   </tr>
