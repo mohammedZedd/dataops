@@ -9,4 +9,5 @@ python-multipart==0.0.12
 python-jose[cryptography]==3.3.0
 bcrypt==4.2.1
 email-validator
-boto3==1.35.36
+boto3>=1.26.0
+openpyxl>=3.1.0

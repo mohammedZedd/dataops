@@ -15,10 +15,12 @@ export async function createAccountantInvitation(
   return data;
 }
 
+export type ReactivationResponse = { reactivated: true; message: string };
+
 export async function createClientInvitation(
   payload: InvitationClientCreatePayload,
-): Promise<Invitation> {
-  const { data } = await apiClient.post<Invitation>('/invitations/clients', payload);
+): Promise<Invitation | ReactivationResponse> {
+  const { data } = await apiClient.post<Invitation | ReactivationResponse>('/invitations/clients', payload);
   return data;
 }
 
@@ -43,4 +45,25 @@ export async function resendInvitation(id: string): Promise<void> {
 
 export async function revokeInvitation(id: string): Promise<void> {
   await apiClient.delete(`/invitations/${id}`);
+}
+
+export interface InvitationUpdatePayload {
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  role?: 'accountant' | 'client';
+  client_id?: string | null;
+  expires_at?: string;  // ISO datetime
+}
+
+export async function updateInvitation(
+  id: string,
+  payload: InvitationUpdatePayload,
+  resend = false,
+): Promise<Invitation> {
+  const { data } = await apiClient.patch<Invitation>(
+    `/invitations/${id}${resend ? '?resend=true' : ''}`,
+    payload,
+  );
+  return data;
 }

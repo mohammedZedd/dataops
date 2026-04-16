@@ -2,6 +2,8 @@
 
 export type UserRole = 'admin' | 'accountant' | 'client';
 
+export type AccessLevel = 'full' | 'readonly' | 'blocked';
+
 export interface User {
   id: string;
   first_name: string;
@@ -11,7 +13,9 @@ export interface User {
   company_id: string;
   company_name?: string | null;
   client_id?: string | null;
+  client_company_name?: string | null;
   phone_number?: string | null;
+  access_level?: AccessLevel;
   created_at: string;
 }
 
@@ -35,6 +39,7 @@ export type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'cancelled';
 
 export interface Invitation {
   id: string;
+  token: string;
   email: string;
   first_name: string;
   last_name: string;
@@ -83,6 +88,15 @@ export interface InvitationAcceptPayload {
   last_name: string;
   phone_number: string;
   password: string;
+  company_name?: string;
+  secteur_activite?: string;
+  forme_juridique?: string;
+  regime_fiscal?: string;
+  ice?: string;
+  if_number?: string;
+  rc?: string;
+  tp?: string;
+  cnss?: string;
 }
 
 // ─── Statuts ──────────────────────────────────────────────────────────────────
@@ -100,6 +114,9 @@ export interface ClientDocument {
   file_size: number | null;
   uploaded_at: string;
   status: DocumentStatus;
+  source?: string | null;
+  description?: string | null;
+  is_new?: boolean;
 }
 
 export type InvoiceStatus =
@@ -107,20 +124,34 @@ export type InvoiceStatus =
   | 'validated'   // validée par le comptable
   | 'rejected';   // rejetée (erreur de saisie / doublon)
 
+export type InvoiceDirection = 'achat' | 'vente';
+
 // ─── Entités métier ───────────────────────────────────────────────────────────
 
 /**
  * User avec role CLIENT vu par le cabinet (issu du système d'invitation).
  */
+export interface AssignedAccountant {
+  id: string;
+  name: string;
+}
+
 export interface ClientUser {
   id: string;
   first_name: string;
   last_name: string;
   email: string;
   phone_number?: string | null;
+  client_id?: string | null;
   client_company_name?: string | null;
+  secteur_activite?: string | null;
+  regime_fiscal?: string | null;
+  forme_juridique?: string | null;
+  documents_count?: number;
   is_active: boolean;
+  access_level?: AccessLevel;
   created_at: string;
+  assigned_to?: AssignedAccountant[];
 }
 
 /**
@@ -131,40 +162,90 @@ export interface Client {
   name: string;
   siret?: string;
   email?: string;
-  documentsCount: number;
-  invoicesToReview: number;
-  createdAt: string; // ISO date
+  secteur_activite?: string | null;
+  regime_fiscal?: string | null;
+  forme_juridique?: string | null;
+  ice?: string | null;
+  if_number?: string | null;
+  rc?: string | null;
+  tp?: string | null;
+  cnss?: string | null;
+  documents_count: number;
+  invoices_to_review: number;
+  created_at: string;
 }
 
 /**
  * Document brut déposé par le client (PDF, image, etc.).
- * Un Document peut avoir zéro ou une Invoice liée (après extraction OCR).
  */
 export interface Document {
   id: string;
   clientId: string;
   fileName: string;
   fileUrl: string;
-  mimeType: string;       // 'application/pdf' | 'image/jpeg' | ...
-  uploadedAt: string;     // ISO datetime
+  mimeType: string;
+  uploadedAt: string;
   status: DocumentStatus;
-  invoiceId?: string;     // défini après extraction réussie
+  invoiceId?: string;
 }
 
 /**
  * Facture extraite d'un Document par OCR / IA.
- * Toujours liée à un Document parent.
+ * Champs en snake_case pour correspondre à l'API FastAPI.
  */
 export interface Invoice {
   id: string;
-  documentId: string;     // référence au Document source
-  clientId: string;       // dénormalisé pour faciliter les requêtes
-  invoiceNumber: string;
-  supplierName: string;
+  document_id: string;
+  invoice_number: string;
+  supplier_name: string;
   date: string;           // ISO date 'YYYY-MM-DD'
-  totalAmount: number;    // montant TTC en euros
-  vatAmount: number;      // montant TVA en euros
+  total_amount: number;   // montant TTC
+  vat_amount: number;     // montant TVA
   status: InvoiceStatus;
+  direction?: InvoiceDirection | null;
+  tva_rate?: number;
+  accounting_validated?: boolean;
+  validated_accounts?: AccountEntry[] | null;
+}
+
+// ─── Accounting suggestion types ──────────────────────────────────────────────
+
+export interface AccountSuggestion {
+  code: string;
+  libelle: string;
+  type: 'charge' | 'tva' | 'tiers' | 'produit';
+  sens: 'debit' | 'credit';
+  montant: number;
+  is_primary: boolean;
+  obligatoire: boolean;
+}
+
+export interface RetenueSource {
+  applicable: boolean;
+  taux: number;
+  compte: string | null;
+  libelle: string | null;
+  note: string | null;
+}
+
+export interface SuggestedAccountsResponse {
+  direction: InvoiceDirection;
+  journal: string;
+  tva_rate: number;
+  tva_regime: string;
+  secteur: string | null;
+  regime_fiscal: string | null;
+  retenue_source: RetenueSource;
+  suggested_accounts: AccountSuggestion[];
+}
+
+export interface AccountEntry {
+  code: string;
+  libelle: string;
+  type: string;
+  sens: string;
+  montant: number;
+  validated: boolean;
 }
 
 // ─── Helpers de présentation ──────────────────────────────────────────────────
@@ -181,3 +262,55 @@ export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
   processed:  'Traité',
   error:      'Erreur',
 };
+
+export const SECTEURS_ACTIVITE = [
+  'Commerce général (import/export, négoce)',
+  'Commerce de détail',
+  'Grande distribution',
+  'Import / Export',
+  'BTP (Bâtiment et Travaux Publics)',
+  'Promotion immobilière',
+  'Services informatiques et numérique',
+  'Conseil et expertise comptable',
+  'Professions libérales (médecin, avocat, architecte, notaire)',
+  'Transport routier de marchandises',
+  'Transport de voyageurs',
+  'Logistique et entreposage',
+  'Industrie manufacturière',
+  'Industrie agroalimentaire',
+  'Agriculture et élevage',
+  'Pêche et aquaculture',
+  'Mines et carrières',
+  'Artisanat',
+  'Hôtellerie et hébergement',
+  'Restauration et cafés',
+  'Télécommunications',
+  'Banque et établissements de crédit',
+  'Assurance',
+  'Santé (cliniques, cabinets médicaux)',
+  'Pharmacie et parapharmacie',
+  'Education et formation professionnelle',
+  'Média et communication',
+  'Énergie et environnement',
+  'Autre',
+] as const;
+
+export const REGIMES_FISCAUX = [
+  'Résultat net réel (RNR)',
+  'Résultat net simplifié (RNS)',
+  'Forfait',
+  'Auto-entrepreneur',
+  'Exonéré (zones franches, CFC, etc.)',
+] as const;
+
+export const FORMES_JURIDIQUES = [
+  'SARL (Société à Responsabilité Limitée)',
+  'SA (Société Anonyme)',
+  'SNC (Société en Nom Collectif)',
+  'SCS (Société en Commandite Simple)',
+  'Auto-entrepreneur',
+  'Personne physique (commerçant)',
+  'Association',
+  'Coopérative',
+  'Succursale étrangère',
+] as const;

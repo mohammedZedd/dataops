@@ -1,6 +1,17 @@
 import apiClient from './axios';
 import type { Client, ClientUser } from '../types';
 
+// ─── Assignation comptable ↔ clients ─────────────────────────────────────────
+
+export async function getAssignedClients(memberId: string): Promise<{ id: string; name: string }[]> {
+  const { data } = await apiClient.get(`/team/${memberId}/assigned-clients`);
+  return data;
+}
+
+export async function setAssignedClients(memberId: string, clientIds: string[]): Promise<void> {
+  await apiClient.put(`/team/${memberId}/assigned-clients`, { client_ids: clientIds });
+}
+
 // ─── Lecture ──────────────────────────────────────────────────────────────────
 
 export async function getClientUsers(): Promise<ClientUser[]> {
@@ -69,9 +80,39 @@ export async function deleteClient(id: string): Promise<void> {
 
 export async function revokeClientAccess(userId: string): Promise<void> {
   try {
-    await apiClient.patch(`/users/${userId}`, { is_active: false });
+    await apiClient.patch(`/users/${userId}`, { access_level: 'readonly' });
   } catch (error) {
     console.error(`[clients] revokeClientAccess(${userId}) :`, error);
-    throw new Error("Impossible de révoquer l'accès du client.");
+    throw new Error("Impossible de limiter l'accès du client.");
+  }
+}
+
+export async function restoreClientAccess(userId: string): Promise<void> {
+  try {
+    await apiClient.patch(`/users/${userId}`, { access_level: 'full', is_active: true });
+  } catch (error) {
+    console.error(`[clients] restoreClientAccess(${userId}) :`, error);
+    throw new Error("Impossible de restaurer l'accès du client.");
+  }
+}
+
+export async function updateClientUser(
+  userId: string,
+  payload: {
+    first_name?: string;
+    last_name?: string;
+    phone_number?: string;
+    company_name?: string;
+    secteur_activite?: string;
+    regime_fiscal?: string;
+    forme_juridique?: string;
+  },
+): Promise<ClientUser> {
+  try {
+    const { data } = await apiClient.patch<ClientUser>(`/users/${userId}`, payload);
+    return data;
+  } catch (error) {
+    console.error(`[clients] updateClientUser(${userId}) :`, error);
+    throw new Error('Impossible de mettre à jour les informations du client.');
   }
 }

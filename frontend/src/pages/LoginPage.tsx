@@ -8,10 +8,11 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { setAuth } = useAuth();
 
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [error,    setError]    = useState<string | null>(null);
-  const [loading,  setLoading]  = useState(false);
+  const [email,        setEmail]        = useState('');
+  const [password,     setPassword]     = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [loading,      setLoading]      = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -20,12 +21,26 @@ export default function LoginPage() {
     try {
       const { access_token, user } = await login(email, password);
       setAuth(access_token, user);
+      sessionStorage.setItem('just_logged_in', 'true');
       navigate('/');
     } catch (err) {
-      const msg = err instanceof AxiosError
-        ? err.response?.data?.detail ?? 'Identifiants invalides.'
-        : 'Une erreur est survenue.';
-      setError(msg);
+      if (err instanceof AxiosError && err.response) {
+        const { status, data } = err.response;
+        const detail = data?.detail;
+        if (status === 401) {
+          setError(detail || 'Email ou mot de passe incorrect.');
+        } else if (status === 403) {
+          setError(detail || 'Votre accès a été révoqué. Contactez votre cabinet comptable.');
+        } else if (status === 422) {
+          setError('Veuillez vérifier le format de votre email.');
+        } else if (status >= 500) {
+          setError('Erreur serveur. Veuillez réessayer plus tard.');
+        } else {
+          setError(detail || 'Une erreur est survenue.');
+        }
+      } else {
+        setError('Impossible de contacter le serveur. Vérifiez votre connexion internet.');
+      }
     } finally {
       setLoading(false);
     }
@@ -80,17 +95,28 @@ export default function LoginPage() {
               <label className="block text-[12px] font-medium text-gray-700 mb-1">
                 Mot de passe
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-                placeholder="••••••••"
-                className="w-full px-3 py-2 text-[13px] border border-gray-200 rounded-lg
-                  placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100
-                  focus:border-blue-400 transition-colors"
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2 pr-10 text-[13px] border border-gray-200 rounded-lg
+                    placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100
+                    focus:border-blue-400 transition-colors"
+                />
+                <button type="button" tabIndex={-1} onClick={() => setShowPassword(v => !v)}
+                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#9CA3AF', display: 'flex', alignItems: 'center' }}>
+                  {showPassword ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  )}
+                </button>
+              </div>
             </div>
 
             <button

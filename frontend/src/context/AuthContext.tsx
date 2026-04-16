@@ -12,6 +12,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   setAuth: (token: string, user: User) => void;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -51,8 +52,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ user: null, token: null, loading: false });
   }
 
+  async function refreshUser() {
+    try {
+      const user = await getMe();
+      setState((prev) => ({ ...prev, user }));
+    } catch {
+      // ignore
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ ...state, setAuth, logout }}>
+    <AuthContext.Provider value={{ ...state, setAuth, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

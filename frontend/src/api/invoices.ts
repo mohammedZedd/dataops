@@ -1,5 +1,5 @@
 import apiClient from './axios';
-import type { Document, Invoice } from '../types';
+import type { Document, Invoice, SuggestedAccountsResponse, AccountEntry } from '../types';
 
 // ─── Documents ────────────────────────────────────────────────────────────────
 
@@ -25,13 +25,6 @@ export async function getDocument(id: string): Promise<Document> {
 
 // ─── Factures ─────────────────────────────────────────────────────────────────
 
-/**
- * Récupère les factures d'un client.
- *
- * Si FastAPI expose GET /clients/{id}/invoices → utiliser directement.
- * Si non, passer par les documents puis récupérer les invoices liées.
- * Ici on suppose que l'endpoint /clients/{id}/invoices existe.
- */
 export async function getInvoicesByClient(clientId: string): Promise<Invoice[]> {
   try {
     const { data } = await apiClient.get<Invoice[]>(`/clients/${clientId}/invoices`);
@@ -54,7 +47,7 @@ export async function getInvoice(id: string): Promise<Invoice> {
 
 export async function updateInvoice(
   id: string,
-  payload: Partial<Omit<Invoice, 'id' | 'clientId' | 'documentId'>>,
+  payload: Partial<Pick<Invoice, 'invoice_number' | 'supplier_name' | 'date' | 'total_amount' | 'vat_amount' | 'status' | 'direction'>>,
 ): Promise<Invoice> {
   try {
     const { data } = await apiClient.patch<Invoice>(`/invoices/${id}`, payload);
@@ -65,11 +58,6 @@ export async function updateInvoice(
   }
 }
 
-/**
- * Valide une facture via PATCH /invoices/{id}.
- * Si FastAPI expose POST /invoices/{id}/validate, remplacer par :
- *   const { data } = await apiClient.post<Invoice>(`/invoices/${id}/validate`);
- */
 export async function validateInvoice(id: string): Promise<Invoice> {
   try {
     const { data } = await apiClient.patch<Invoice>(`/invoices/${id}`, { status: 'validated' });
@@ -87,5 +75,58 @@ export async function rejectInvoice(id: string): Promise<Invoice> {
   } catch (error) {
     console.error(`[invoices] rejectInvoice(${id}) :`, error);
     throw new Error('Impossible de rejeter la facture.');
+  }
+}
+
+// ─── Comptabilité ─────────────────────────────────────────────────────────────
+
+export async function getSuggestedAccounts(invoiceId: string): Promise<SuggestedAccountsResponse> {
+  try {
+    const { data } = await apiClient.get<SuggestedAccountsResponse>(`/invoices/${invoiceId}/suggested-accounts`);
+    return data;
+  } catch (error) {
+    console.error(`[invoices] getSuggestedAccounts(${invoiceId}) :`, error);
+    throw new Error('Impossible de charger les suggestions comptables.');
+  }
+}
+
+export async function saveInvoiceAccounts(
+  invoiceId: string,
+  accounts: AccountEntry[],
+  direction?: string,
+): Promise<Invoice> {
+  try {
+    const { data } = await apiClient.post<Invoice>(`/invoices/${invoiceId}/accounts`, {
+      accounts,
+      direction,
+    });
+    return data;
+  } catch (error) {
+    console.error(`[invoices] saveInvoiceAccounts(${invoiceId}) :`, error);
+    throw new Error("Impossible d'enregistrer l'imputation comptable.");
+  }
+}
+
+export async function exportInvoiceExcel(invoiceId: string): Promise<void> {
+  try {
+    const response = await apiClient.get(`/invoices/${invoiceId}/export-excel`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const disposition = response.headers['content-disposition'];
+    const match = disposition?.match(/filename="?(.+?)"?$/);
+    a.download = match?.[1] ?? `journal_${invoiceId}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error(`[invoices] exportInvoiceExcel(${invoiceId}) :`, error);
+    throw new Error('Impossible de télécharger le journal Excel.');
   }
 }

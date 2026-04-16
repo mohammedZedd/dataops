@@ -1,5 +1,10 @@
 """
-Email service — AWS SES via boto3.
+Email service — SMTP (Brevo, Gmail, Mailtrap…) ou AWS SES comme fallback.
+
+Priorité :
+  1. SMTP si SMTP_HOST est configuré dans les variables d'environnement
+  2. AWS SES si AWS_ACCESS_KEY_ID est configuré
+  3. Sinon : log d'avertissement, aucun email envoyé
 
 Chaque fonction publique retourne True (succès) ou False (échec).
 Les erreurs sont loggées mais ne bloquent jamais le flow appelant.
@@ -7,11 +12,12 @@ Les erreurs sont loggées mais ne bloquent jamais le flow appelant.
 from __future__ import annotations
 
 import logging
-import os
+import smtplib
+import ssl
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from functools import lru_cache
 from pathlib import Path
-from string import Template
-from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -20,15 +26,58 @@ from app.config import settings
 
 logger = logging.getLogger("email")
 
-# Dossier racine des templates, résolu à partir de ce fichier
 _TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "emails"
 
 
-# ─── Client boto3 (singleton) ─────────────────────────────────────────────────
+# ─── Template rendering ───────────────────────────────────────────────────────
+
+def _render(template_name: str, variables: dict[str, str]) -> str:
+    path = _TEMPLATES_DIR / template_name
+    raw = path.read_text(encoding="utf-8")
+    for key, value in variables.items():
+        raw = raw.replace("{{ " + key + " }}", value)
+    return raw
+
+
+# ─── SMTP sender ──────────────────────────────────────────────────────────────
+
+def _send_smtp(*, to_email: str, subject: str, html_body: str) -> bool:
+    """Envoie via SMTP (Brevo, Gmail, Mailtrap, etc.)."""
+    from_addr = settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME
+    logger.info("[EMAIL/SMTP] Sending to %s subject=%r", to_email, subject)
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = from_addr
+        msg["To"]      = to_email
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        if settings.SMTP_USE_TLS:
+            # STARTTLS — port 587 standard
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                server.ehlo()
+                server.starttls(context=ssl.create_default_context())
+                server.ehlo()
+                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+                server.sendmail(from_addr, [to_email], msg.as_string())
+        else:
+            # SSL direct — port 465
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, context=ctx, timeout=10) as server:
+                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+                server.sendmail(from_addr, [to_email], msg.as_string())
+
+        logger.info("[EMAIL/SMTP] Sent subject=%r to=%s", subject, to_email)
+        return True
+    except Exception as exc:
+        logger.error("[EMAIL/SMTP] Error subject=%r to=%s error=%s", subject, to_email, exc)
+        return False
+
+
+# ─── AWS SES sender ───────────────────────────────────────────────────────────
 
 @lru_cache(maxsize=1)
 def _ses_client():  # type: ignore[return]
-    """Retourne le client SES. Initialisé une seule fois grâce à lru_cache."""
     return boto3.client(
         "ses",
         region_name=settings.AWS_REGION,
@@ -37,27 +86,8 @@ def _ses_client():  # type: ignore[return]
     )
 
 
-# ─── Helpers internes ─────────────────────────────────────────────────────────
-
-def _render(template_name: str, variables: dict[str, str]) -> str:
-    """Charge le template HTML et substitue les variables {{ key }}."""
-    path = _TEMPLATES_DIR / template_name
-    raw = path.read_text(encoding="utf-8")
-    # On utilise str.replace séquentiellement pour éviter toute dépendance
-    # à Jinja2 (les templates n'ont pas de logique, uniquement des variables).
-    for key, value in variables.items():
-        raw = raw.replace("{{ " + key + " }}", value)
-    return raw
-
-
-def _send(
-    *,
-    to_email: str,
-    subject: str,
-    html_body: str,
-) -> bool:
-    """Envoie un email via SES. Retourne True si succès, False sinon."""
-    logger.info("[EMAIL] Sending to %s subject=%r", to_email, subject)
+def _send_ses(*, to_email: str, subject: str, html_body: str) -> bool:
+    logger.info("[EMAIL/SES] Sending to %s subject=%r", to_email, subject)
     try:
         _ses_client().send_email(
             Source=settings.SES_SENDER_EMAIL,
@@ -67,14 +97,30 @@ def _send(
                 "Body": {"Html": {"Data": html_body, "Charset": "UTF-8"}},
             },
         )
-        logger.info("[EMAIL] sent subject=%r to=%s", subject, to_email)
+        logger.info("[EMAIL/SES] Sent subject=%r to=%s", subject, to_email)
         return True
     except (BotoCoreError, ClientError) as exc:
-        logger.error("[EMAIL] SES error subject=%r to=%s error=%s", subject, to_email, exc)
+        logger.error("[EMAIL/SES] Error subject=%r to=%s error=%s", subject, to_email, exc)
         return False
-    except Exception as exc:  # noqa: BLE001
-        logger.error("[EMAIL] unexpected error subject=%r to=%s error=%s", subject, to_email, exc)
+    except Exception as exc:
+        logger.error("[EMAIL/SES] Unexpected error subject=%r to=%s error=%s", subject, to_email, exc)
         return False
+
+
+# ─── Dispatcher ───────────────────────────────────────────────────────────────
+
+def _send(*, to_email: str, subject: str, html_body: str) -> bool:
+    """Choisit automatiquement SMTP ou SES selon la configuration."""
+    if settings.SMTP_HOST:
+        return _send_smtp(to_email=to_email, subject=subject, html_body=html_body)
+    if settings.AWS_ACCESS_KEY_ID:
+        return _send_ses(to_email=to_email, subject=subject, html_body=html_body)
+    logger.warning(
+        "[EMAIL] Aucun service email configuré. "
+        "Définissez SMTP_HOST ou AWS_ACCESS_KEY_ID dans votre .env. "
+        "Email non envoyé à %s", to_email
+    )
+    return False
 
 
 # ─── API publique ──────────────────────────────────────────────────────────────
@@ -86,10 +132,6 @@ def send_invitation_accountant_email(
     cabinet_name: str,
     invite_link: str,
 ) -> bool:
-    """
-    Email envoyé au comptable invité par un admin.
-    Template : invitation_accountant.html
-    """
     html = _render("invitation_accountant.html", {
         "first_name":   first_name,
         "cabinet_name": cabinet_name,
@@ -110,10 +152,6 @@ def send_invitation_client_email(
     client_company_name: str,
     invite_link: str,
 ) -> bool:
-    """
-    Email envoyé au client invité par un admin.
-    Template : invitation_client.html
-    """
     html = _render("invitation_client.html", {
         "first_name":           first_name,
         "cabinet_name":         cabinet_name,
@@ -133,10 +171,6 @@ def send_reset_password_email(
     first_name: str,
     reset_link: str,
 ) -> bool:
-    """
-    Email de réinitialisation de mot de passe. Lien valable 1h.
-    Template : reset_password.html
-    """
     html = _render("reset_password.html", {
         "first_name": first_name,
         "reset_link": reset_link,
@@ -154,10 +188,6 @@ def send_welcome_email(
     first_name: str,
     cabinet_name: str,
 ) -> bool:
-    """
-    Email de bienvenue envoyé à l'admin après création de son cabinet.
-    Template : welcome.html
-    """
     html = _render("welcome.html", {
         "first_name":   first_name,
         "cabinet_name": cabinet_name,

@@ -35,6 +35,7 @@ class User(Base):
     phone_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     company: Mapped["Company"] = relationship("Company", foreign_keys=[company_id], lazy="joined")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    access_level: Mapped[str] = mapped_column(String(20), default="full", server_default="full", nullable=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

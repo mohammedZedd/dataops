@@ -25,10 +25,22 @@ class InvitationClientCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+class InvitationUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    role: Optional[UserRole] = None
+    client_id: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class InvitationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    token: str
     email: str
     first_name: str
     last_name: str
@@ -65,5 +77,16 @@ class InvitationAcceptRequest(BaseModel):
     last_name: str
     phone_number: str
     password: str
+    # Company info (optional — CLIENT role only)
+    company_name: Optional[str] = None
+    secteur_activite: Optional[str] = None
+    forme_juridique: Optional[str] = None
+    regime_fiscal: Optional[str] = None
+    # Fiscal IDs (optional)
+    ice: Optional[str] = None
+    if_number: Optional[str] = None
+    rc: Optional[str] = None
+    tp: Optional[str] = None
+    cnss: Optional[str] = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
