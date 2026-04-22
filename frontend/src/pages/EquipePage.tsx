@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users2, Plus, Search, Loader2 } from 'lucide-react';
 import apiClient from '../api/axios';
+import { useAuth } from '../context/AuthContext';
+import InviteAccountantModal from '../features/invitations/InviteAccountantModal';
+import type { Invitation } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -77,7 +80,9 @@ export default function EquipePage() {
   const [search,       setSearch]       = useState('');
   const [roleFilter,   setRoleFilter]   = useState<'all' | 'admin' | 'accountant'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [inviteOpen,   setInviteOpen]   = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -117,14 +122,14 @@ export default function EquipePage() {
           </p>
         </div>
         <button
-          onClick={() => navigate('/invitations')}
+          onClick={() => setInviteOpen(true)}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '9px 18px', background: '#3B82F6', color: 'white',
             border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13,
           }}
         >
-          <Plus size={16} /> Inviter un membre
+          <Plus size={16} /> Inviter un comptable
         </button>
       </div>
 
@@ -274,6 +279,14 @@ export default function EquipePage() {
             );
           })}
         </div>
+      )}
+
+      {inviteOpen && (
+        <InviteAccountantModal
+          companyName={user?.company_name}
+          onClose={() => setInviteOpen(false)}
+          onCreated={(_inv: Invitation) => { setInviteOpen(false); fetchAll(); }}
+        />
       )}
     </div>
   );

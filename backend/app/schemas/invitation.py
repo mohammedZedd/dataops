@@ -25,6 +25,14 @@ class InvitationClientCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+class ClientMemberInviteCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class InvitationUpdate(BaseModel):
     email: Optional[EmailStr] = None
     first_name: Optional[str] = None

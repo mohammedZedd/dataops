@@ -56,6 +56,51 @@ export interface InvitationUpdatePayload {
   expires_at?: string;  // ISO datetime
 }
 
+export interface ClientTeamMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  is_active: boolean;
+  created_at: string;
+  is_me: boolean;
+}
+
+export interface ClientTeamInvitePayload {
+  first_name: string;
+  last_name: string;
+  email: string;
+}
+
+export async function getClientTeamMembers(): Promise<ClientTeamMember[]> {
+  const { data } = await apiClient.get<ClientTeamMember[]>('/client/team');
+  return data;
+}
+
+export async function inviteClientTeamMember(
+  payload: ClientTeamInvitePayload,
+): Promise<Invitation> {
+  const { data } = await apiClient.post<Invitation>('/client/team/invite', payload);
+  return data;
+}
+
+export async function removeClientTeamMember(memberId: string): Promise<void> {
+  await apiClient.delete(`/client/team/${memberId}`);
+}
+
+export async function getClientTeamInvitations(): Promise<Invitation[]> {
+  const { data } = await apiClient.get<Invitation[]>('/client/team/invitations');
+  return data;
+}
+
+export async function resendClientTeamInvitation(invitationId: string): Promise<void> {
+  await apiClient.post(`/client/team/invitations/${invitationId}/resend`);
+}
+
+export async function cancelClientTeamInvitation(invitationId: string): Promise<void> {
+  await apiClient.delete(`/client/team/invitations/${invitationId}`);
+}
+
 export async function updateInvitation(
   id: string,
   payload: InvitationUpdatePayload,

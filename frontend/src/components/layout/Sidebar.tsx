@@ -57,7 +57,7 @@ const NAV_ADMIN: { section: string; items: NavItem[] }[] = [
   },
 ];
 
-function buildNavClient(receivedBadge: number): { section: string; items: NavItem[] }[] {
+function buildNavClient(receivedBadge: number, pendingInvBadge: number): { section: string; items: NavItem[] }[] {
   return [
     {
       section: 'Espace client',
@@ -72,6 +72,8 @@ function buildNavClient(receivedBadge: number): { section: string; items: NavIte
     {
       section: 'Compte',
       items: [
+        { to: '/client/team', label: 'Mon équipe', icon: <Users2 size={16} /> },
+        { to: '/client/invitations', label: 'Invitations', icon: <Users size={16} />, badge: pendingInvBadge },
         { to: '/client/profile', label: 'Mon profil', icon: <UserCircle size={16} /> },
       ],
     },
@@ -95,7 +97,8 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const { isOpen, close } = useSidebar();
   const navigate = useNavigate();
-  const [receivedBadge, setReceivedBadge] = useState(0);
+  const [receivedBadge,   setReceivedBadge]   = useState(0);
+  const [pendingInvBadge, setPendingInvBadge] = useState(0);
 
   // Fetch badge count for received docs (client only)
   useEffect(() => {
@@ -112,7 +115,21 @@ export function Sidebar() {
     return () => clearInterval(t);
   }, [user?.role]);
 
-  const nav = user?.role === 'client' ? buildNavClient(receivedBadge) : NAV_ADMIN;
+  // Fetch pending invitations badge (client only)
+  useEffect(() => {
+    if (user?.role !== 'client') return;
+    const fetchInv = async () => {
+      try {
+        const { data } = await apiClient.get<{ status: string }[]>('/client/team/invitations');
+        setPendingInvBadge(data.filter(i => i.status === 'pending').length);
+      } catch { /* ignore */ }
+    };
+    fetchInv();
+    const t = setInterval(fetchInv, 60000);
+    return () => clearInterval(t);
+  }, [user?.role]);
+
+  const nav = user?.role === 'client' ? buildNavClient(receivedBadge, pendingInvBadge) : NAV_ADMIN;
 
   function handleLogout() {
     logout();

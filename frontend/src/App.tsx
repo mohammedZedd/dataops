@@ -22,6 +22,8 @@ import TasksPage from './pages/TasksPage';
 import NotesPage from './pages/NotesPage';
 import TeamMemberPage from './pages/TeamMemberPage';
 import EquipePage from './pages/EquipePage';
+import ClientTeamPage from './pages/ClientTeamPage';
+import ClientInvitationsPage from './pages/ClientInvitationsPage';
 
 export default function App() {
   return (
@@ -50,6 +52,8 @@ export default function App() {
               <Route path="equipe" element={<EquipePage />} />
               <Route path="equipe/:memberId" element={<TeamMemberPage />} />
               <Route path="invitations" element={<InvitationsPage />} />
+              <Route path="client/team" element={<ClientTeamPage />} />
+              <Route path="client/invitations" element={<ClientInvitationsPage />} />
               <Route path="client/documents" element={<ClientDocumentsPage />} />
               <Route path="client/documents/received" element={<ClientReceivedDocumentsPage />} />
               <Route path="client/messages" element={<ClientMessagesPage />} />
