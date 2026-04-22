@@ -9,6 +9,7 @@ import { getClientDocuments, getPresignedDownloadUrl, createInvoiceFromDocument 
 import type { AdminClientDoc } from '../api/documents';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import InviteClientModal from '../features/invitations/InviteClientModal';
+import { exportClientsToExcel } from '../utils/exportClients';
 import type { ClientUser } from '../types';
 
 // ─── Confirmation modal (portal) ─────────────────────────────────────────────
@@ -1106,7 +1107,7 @@ export default function ClientsListPage() {
 
         {!loading && !error && (
           <>
-            {/* Top bar: count + invite button */}
+            {/* Top bar: count + export + invite buttons */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <p style={{ fontSize: 13, color: '#6B7280' }}>
                 {q
@@ -1114,19 +1115,41 @@ export default function ClientsListPage() {
                   : `${clients.length} client${clients.length !== 1 ? 's' : ''} inscrit${clients.length !== 1 ? 's' : ''}`
                 }
               </p>
-              <button
-                onClick={() => setShowInvite(true)}
-                style={{
-                  height: 38, padding: '0 16px', background: '#3B82F6', color: '#fff',
-                  border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500,
-                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#2563EB'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#3B82F6'; }}
-              >
-                <Plus size={15} />
-                Inviter un client
-              </button>
+              <div style={{ display: 'inline-flex', gap: 8 }}>
+                <button
+                  onClick={() => exportClientsToExcel(clients)}
+                  disabled={clients.length === 0}
+                  style={{
+                    height: 38, padding: '0 14px',
+                    background: clients.length === 0 ? '#E5E7EB' : '#fff',
+                    color: clients.length === 0 ? '#9CA3AF' : '#059669',
+                    border: `1px solid ${clients.length === 0 ? '#E5E7EB' : '#A7F3D0'}`,
+                    borderRadius: 8, fontSize: 13, fontWeight: 500,
+                    cursor: clients.length === 0 ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    transition: 'background 0.15s, border-color 0.15s',
+                  }}
+                  onMouseEnter={(e) => { if (clients.length) (e.currentTarget as HTMLButtonElement).style.background = '#ECFDF5'; }}
+                  onMouseLeave={(e) => { if (clients.length) (e.currentTarget as HTMLButtonElement).style.background = '#fff'; }}
+                  title="Exporter tous les clients en Excel"
+                >
+                  <FileSpreadsheet size={14} />
+                  Exporter Excel
+                </button>
+                <button
+                  onClick={() => setShowInvite(true)}
+                  style={{
+                    height: 38, padding: '0 16px', background: '#3B82F6', color: '#fff',
+                    border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#2563EB'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#3B82F6'; }}
+                >
+                  <Plus size={15} />
+                  Inviter un client
+                </button>
+              </div>
             </div>
 
             {/* Search bar */}
